@@ -1,1112 +1,535 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MediaSpine — Clinical AI Posture Scanner</title>
-  <meta name="description" content="Real-time AI-powered posture and facial biometric analysis for clinical spinal health assessment. Powered by MediaPipe and Groq Llama-3." />
-  <meta property="og:title" content="MediaSpine — Clinical AI Posture Scanner" />
-  <meta property="og:description" content="Real-time browser-based posture analysis powered by MediaPipe and Groq AI." />
-  <meta property="og:url" content="https://mediaspine.vercel.app" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MediaSpine — Posture, measured</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,340;0,9..144,480;0,9..144,560;1,9..144,420&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #F6F4EE;
+    --surface: #FFFFFF;
+    --ink: #1C1D1B;
+    --ink-soft: #6B6A64;
+    --sage: #4A6B5A;
+    --sage-light: #8FA89A;
+    --sage-pale: #E7ECE4;
+    --amber: #B8935F;
+    --brick: #A8534A;
+    --line: #E1DED4;
+    --display: 'Fraunces', serif;
+    --body: 'Inter', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+    --ease: cubic-bezier(.22,.61,.36,1);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--body);
+    -webkit-font-smoothing:antialiased; line-height:1.5; overflow-x:hidden;
+  }
+  a{color:inherit;}
+  img,svg{display:block; max-width:100%;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 32px;}
+  .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--sage); display:flex; align-items:center; gap:10px; margin-bottom:18px;
+  }
+  .eyebrow::before{content:''; width:16px; height:1px; background:var(--sage);}
+  h1,h2,h3{font-family:var(--display); font-weight:480; letter-spacing:-.01em; color:var(--ink);}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--body); font-weight:600;
+    font-size:14.5px; padding:14px 26px; border-radius:2px; border:1px solid transparent;
+    cursor:pointer; transition:transform .25s var(--ease), border-color .25s var(--ease), background .25s var(--ease);
+    text-decoration:none;
+  }
+  .btn-primary{background:var(--sage); color:#fff;}
+  .btn-primary:hover{transform:scale(1.015); background:#3d5a4b;}
+  .btn-ghost{background:transparent; color:var(--ink); border-color:var(--line);}
+  .btn-ghost:hover{border-color:var(--sage); transform:scale(1.015);}
+  button:focus-visible, a:focus-visible{outline:2px solid var(--sage); outline-offset:3px;}
 
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky; top:0; z-index:50; background:rgba(246,244,238,.86); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:76px;}
+  .logo{display:flex; align-items:center; gap:10px; font-family:var(--display); font-size:22px; font-style:italic; font-weight:480;}
+  .logo span{color:var(--sage);}
+  .logo img{height:36px; border-radius:4px; mix-blend-mode:multiply;}
+  .navlinks{display:flex; gap:36px; font-size:13.5px; letter-spacing:.02em;}
+  .navlinks a{opacity:.75; transition:opacity .2s;}
+  .navlinks a:hover{opacity:1;}
+  @media(max-width:760px){.navlinks{display:none;}}
 
-    :root {
-      --bg:        #060d1a;
-      --bg2:       #0b1629;
-      --surface:   rgba(255,255,255,0.04);
-      --border:    rgba(255,255,255,0.08);
-      --cyan:      #22d3ee;
-      --cyan-dim:  rgba(34,211,238,0.12);
-      --blue:      #3b82f6;
-      --purple:    #8b5cf6;
-      --green:     #10b981;
-      --red:       #ef4444;
-      --text:      #f1f5f9;
-      --muted:     #64748b;
-      --mono:      'JetBrains Mono', monospace;
-    }
+  /* ---------- HERO ---------- */
+  .hero{position:relative; padding:120px 0 100px; overflow:hidden;}
+  .glow{
+    position:absolute; top:-200px; right:-160px; width:640px; height:640px; border-radius:50%;
+    background:radial-gradient(circle, rgba(74,107,90,.14), transparent 70%);
+    animation:drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes drift{from{transform:translate(0,0);} to{transform:translate(-30px,40px);}}
+  .hero-grid{display:grid; grid-template-columns:1.1fr .9fr; gap:64px; align-items:center; position:relative;}
+  @media(max-width:900px){.hero-grid{grid-template-columns:1fr;}}
+  .hero h1{font-size:clamp(40px,6vw,72px); line-height:1.03;}
+  .hero h1 em{font-style:italic; color:var(--sage);}
+  .hero p.lede{font-size:17.5px; color:var(--ink-soft); max-width:480px; margin:26px 0 34px;}
+  .hero-ctas{display:flex; gap:14px; flex-wrap:wrap;}
 
-    html { scroll-behavior: smooth; }
+  /* signature hero photograph + live angle badge (replaces the standalone line-diagram) */
+  .hero-photo{
+    position:relative; border-radius:4px; overflow:hidden; aspect-ratio:4/5;
+    border:1px solid var(--line);
+    background:transparent;
+  }
+  .hero-photo img{
+    width:100%; height:100%; object-fit:cover;
+  }
+  .angle-badge{
+    position:absolute; left:20px; bottom:20px; background:rgba(255,255,255,.92);
+    backdrop-filter:blur(6px); border:1px solid var(--line); border-radius:2px;
+    padding:12px 18px; display:flex; flex-direction:column; gap:3px;
+  }
+  .angle-badge .val{font-family:var(--mono); font-size:22px; color:var(--sage);}
+  .angle-badge .label{font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);}
 
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      overflow-x: hidden;
-      line-height: 1.6;
-    }
+  /* ---------- STAT STRIP (numeric hook) ---------- */
+  .stats{border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--surface);}
+  .stats .wrap{
+    display:grid; grid-template-columns:repeat(4,1fr); padding:30px 32px;
+  }
+  @media(max-width:760px){.stats .wrap{grid-template-columns:1fr 1fr; row-gap:24px;}}
+  .stat-item{border-left:1px solid var(--line); padding-left:18px;}
+  .stat-item:first-child{border-left:none; padding-left:0;}
+  @media(max-width:760px){.stat-item:nth-child(3){border-left:none; padding-left:0;}}
+  .stat-item .num{font-family:var(--mono); font-size:26px; color:var(--sage); line-height:1;}
+  .stat-item .cap{font-family:var(--mono); font-size:11px; letter-spacing:.03em; color:var(--ink-soft); margin-top:8px; display:block; line-height:1.4;}
 
-    /* ─── Ambient background ─── */
-    .ambient {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-      overflow: hidden;
-    }
-    .orb {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(100px);
-      opacity: 0.28;
-      animation: drift 20s ease-in-out infinite alternate;
-    }
-    .orb-1 { width: 700px; height: 700px; background: #1e40af; top: -200px; left: -200px; }
-    .orb-2 { width: 600px; height: 600px; background: #7c3aed; bottom: -150px; right: -150px; animation-delay: -10s; }
-    .orb-3 { width: 400px; height: 400px; background: #0891b2; top: 40%; left: 55%; animation-delay: -5s; animation-duration: 15s; }
-    @keyframes drift {
-      0%   { transform: translate(0, 0) scale(1); }
-      100% { transform: translate(40px, 60px) scale(1.15); }
-    }
+  /* ---------- SECTION SHELL ---------- */
+  section{padding:110px 0;}
+  .section-head{max-width:640px; margin-bottom:64px;}
+  .section-head h2{font-size:clamp(30px,3.6vw,44px); line-height:1.08;}
+  .section-head p{color:var(--ink-soft); font-size:16px; margin-top:16px;}
+  .reveal{opacity:0; transform:translateY(16px); transition:opacity .6s var(--ease), transform .6s var(--ease);}
+  .reveal.in{opacity:1; transform:translateY(0);}
 
-    /* ─── Noise overlay ─── */
-    .noise {
-      position: fixed;
-      inset: 0;
-      z-index: 1;
-      pointer-events: none;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");
-      opacity: 0.5;
-    }
+  /* ---------- HOW IT WORKS ---------- */
+  .steps{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line);}
+  @media(max-width:900px){.steps{grid-template-columns:1fr 1fr;}}
+  @media(max-width:560px){.steps{grid-template-columns:1fr;}}
+  .step{background:var(--bg); padding:36px 28px;}
+  .step .num{font-family:var(--mono); font-size:12px; color:var(--sage); margin-bottom:22px;}
+  .step h3{font-size:19px; font-weight:480; margin-bottom:10px;}
+  .step p{font-size:14px; color:var(--ink-soft); line-height:1.55;}
 
-    /* ─── Layout ─── */
-    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 2; }
+  /* ---------- METRICS PREVIEW ---------- */
+  .metrics-band{background:var(--ink); color:var(--bg); padding:110px 0;}
+  .metrics-band .eyebrow{color:var(--sage-light);}
+  .metrics-band .eyebrow::before{background:var(--sage-light);}
+  .metrics-band .section-head h2{color:#fff;}
+  .metrics-band .section-head p{color:#B9B7AE;}
+  .metric-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:rgba(255,255,255,.12);}
+  @media(max-width:900px){.metric-grid{grid-template-columns:1fr 1fr;}}
+  .metric{background:#232420; padding:26px 22px;}
+  .metric .label{font-size:12px; color:#9C9A90; text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px;}
+  .metric .val{font-family:var(--mono); font-size:30px; color:#fff;}
+  .metric .val small{font-size:14px; color:var(--sage-light); margin-left:4px;}
+  .metric .tag{display:inline-block; margin-top:12px; font-family:var(--mono); font-size:10.5px; padding:3px 8px; border-radius:2px;}
+  .tag.good{background:rgba(74,107,90,.25); color:#9FC2AE;}
+  .tag.caution{background:rgba(184,147,95,.22); color:#DDBB88;}
 
-    /* ─── Navbar ─── */
-    nav {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      z-index: 100;
-      padding: 16px 0;
-      transition: background 0.3s, backdrop-filter 0.3s;
-    }
-    nav.scrolled {
-      background: rgba(6,13,26,0.85);
-      backdrop-filter: blur(20px);
-      border-bottom: 1px solid var(--border);
-    }
-    .nav-inner {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      text-decoration: none;
-      color: var(--text);
-    }
-    .logo-icon {
-      width: 36px; height: 36px;
-      background: linear-gradient(135deg, var(--cyan), var(--blue));
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-    }
-    .logo-text {
-      font-weight: 700;
-      font-size: 18px;
-      letter-spacing: -0.3px;
-    }
-    .logo-text span { color: var(--cyan); }
-    .nav-links {
-      display: flex;
-      gap: 32px;
-      list-style: none;
-    }
-    .nav-links a {
-      color: var(--muted);
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 500;
-      transition: color 0.2s;
-    }
-    .nav-links a:hover { color: var(--text); }
-    .nav-cta {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      border-radius: 10px;
-      font-weight: 600;
-      font-size: 14px;
-      text-decoration: none;
-      transition: all 0.2s;
-      cursor: pointer;
-      border: none;
-    }
-    .btn-ghost {
-      color: var(--text);
-      background: var(--surface);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover {
-      background: rgba(255,255,255,0.08);
-      border-color: rgba(255,255,255,0.15);
-    }
-    .btn-primary {
-      background: linear-gradient(135deg, var(--cyan), var(--blue));
-      color: #fff;
-      box-shadow: 0 0 24px rgba(34,211,238,0.25);
-    }
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 0 36px rgba(34,211,238,0.4);
-    }
+  /* ---------- SCANNER ---------- */
+  .scanner-wrap{display:grid; grid-template-columns:1.05fr .95fr; gap:56px; align-items:start;}
+  @media(max-width:960px){.scanner-wrap{grid-template-columns:1fr;}}
+  .cam-frame{
+    background:#1B1C19; border-radius:6px; aspect-ratio:4/3; position:relative; overflow:hidden;
+    border:1px solid #2C2D28;
+  }
+  .cam-frame svg{position:absolute; inset:0; width:100%; height:100%;}
+  .cam-badge{
+    position:absolute; top:16px; left:16px; font-family:var(--mono); font-size:10.5px; color:#fff;
+    background:rgba(0,0,0,.4); padding:5px 10px; border-radius:20px; display:flex; align-items:center; gap:6px;
+  }
+  .cam-badge .rec{width:6px; height:6px; border-radius:50%; background:#E05B4E; animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.3;}}
+  .scan-actions{display:flex; gap:12px; margin-top:20px; flex-wrap:wrap;}
+  .countdown{
+    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    font-family:var(--display); font-size:96px; color:#fff; background:rgba(0,0,0,.35);
+  }
 
-    /* ─── Hero ─── */
-    .hero {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding-top: 100px;
-      padding-bottom: 80px;
-    }
-    .hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      border: 1px solid rgba(34,211,238,0.3);
-      background: rgba(34,211,238,0.07);
-      border-radius: 999px;
-      font-size: 13px;
-      color: var(--cyan);
-      font-weight: 500;
-      margin-bottom: 28px;
-      width: fit-content;
-    }
-    .badge-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--cyan);
-      animation: pulse-dot 2s ease-in-out infinite;
-    }
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.8); }
-    }
-    h1 {
-      font-size: clamp(40px, 6vw, 80px);
-      font-weight: 900;
-      line-height: 1.05;
-      letter-spacing: -2px;
-      margin-bottom: 24px;
-    }
-    .gradient-text {
-      background: linear-gradient(135deg, var(--cyan) 0%, var(--blue) 50%, var(--purple) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .hero-sub {
-      font-size: 20px;
-      color: var(--muted);
-      max-width: 580px;
-      margin-bottom: 40px;
-      line-height: 1.7;
-    }
-    .hero-actions {
-      display: flex;
-      gap: 16px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .btn-lg { padding: 14px 28px; font-size: 16px; border-radius: 12px; }
+  .side-metrics{display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line);}
+  .side-metric{background:var(--surface); padding:16px 20px; display:flex; justify-content:space-between; align-items:center;}
+  .side-metric .label{font-size:13px; color:var(--ink-soft);}
+  .side-metric .val{font-family:var(--mono); font-size:15px;}
 
-    .hero-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 48px;
-      align-items: center;
-      margin-top: 0;
-    }
-    .hero-visual {
-      position: relative;
-    }
-    .hero-image-wrap {
-      position: relative;
-      border-radius: 20px;
-      overflow: hidden;
-      border: 1px solid var(--border);
-      box-shadow: 0 0 80px rgba(34,211,238,0.1), 0 40px 80px rgba(0,0,0,0.5);
-    }
-    .hero-image-wrap img {
-      width: 100%;
-      display: block;
-    }
-    .hero-image-overlay {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to bottom, transparent 60%, var(--bg) 100%);
-    }
-    /* Floating metric cards */
-    .metric-card {
-      position: absolute;
-      background: rgba(11,22,41,0.9);
-      border: 1px solid var(--border);
-      backdrop-filter: blur(20px);
-      border-radius: 12px;
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 13px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    }
-    .metric-card-icon {
-      width: 32px; height: 32px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      flex-shrink: 0;
-    }
-    .metric-card-label { color: var(--muted); font-size: 11px; }
-    .metric-card-val { font-weight: 700; font-size: 15px; font-family: var(--mono); }
-    .mc-1 { top: 10%; left: -60px; animation: float-card 6s ease-in-out infinite; }
-    .mc-2 { bottom: 20%; right: -60px; animation: float-card 7s ease-in-out infinite reverse; animation-delay: -3s; }
-    .mc-3 { top: 55%; left: -70px; animation: float-card 8s ease-in-out infinite; animation-delay: -2s; }
-    @keyframes float-card {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-12px); }
-    }
+  /* ---------- REPORT ---------- */
+  .report{
+    margin-top:56px; border:1px solid var(--line); background:var(--surface); border-radius:4px; overflow:hidden;
+    display:none;
+  }
+  .report.show{display:block;}
+  .report-top{display:grid; grid-template-columns:3fr 1fr;}
+  @media(max-width:700px){.report-top{grid-template-columns:1fr;}}
+  .report-summary{padding:30px 32px; border-right:1px solid var(--line);}
+  @media(max-width:700px){.report-summary{border-right:none; border-bottom:1px solid var(--line);}}
+  .report-summary .eyebrow{margin-bottom:10px;}
+  .report-summary p{font-size:15.5px; line-height:1.6; color:var(--ink);}
+  .severity-box{padding:30px 24px; display:flex; flex-direction:column; justify-content:center; align-items:center; background:var(--sage-pale); text-align:center;}
+  .severity-box .eyebrow{margin-bottom:8px;}
+  .severity-box .level{font-family:var(--display); font-style:italic; font-size:26px; color:var(--sage);}
+  .report-grid{display:grid; grid-template-columns:1fr 1fr 1fr; border-top:1px solid var(--line);}
+  @media(max-width:700px){.report-grid{grid-template-columns:1fr;}}
+  .report-cell{padding:26px 28px; border-right:1px solid var(--line);}
+  .report-cell:last-child{border-right:none;}
+  @media(max-width:700px){.report-cell{border-right:none; border-bottom:1px solid var(--line);}}
+  .report-cell h4{font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:12px; color:var(--ink-soft);}
+  .report-cell p, .report-cell li{font-size:14px; line-height:1.6; color:var(--ink);}
+  .report-cell ol{padding-left:18px;}
+  .report-cell li{margin-bottom:8px;}
+  .report-cell.issues h4{color:var(--brick);}
+  .report-cell.risks h4{color:var(--amber);}
+  .report-cell.recs h4{color:var(--sage);}
 
-    /* ─── Section base ─── */
-    section { padding: 100px 0; }
-    .section-tag {
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      color: var(--cyan);
-      margin-bottom: 12px;
-    }
-    h2 {
-      font-size: clamp(30px, 4vw, 48px);
-      font-weight: 800;
-      letter-spacing: -1px;
-      line-height: 1.15;
-      margin-bottom: 16px;
-    }
-    .section-lead {
-      font-size: 18px;
-      color: var(--muted);
-      max-width: 560px;
-      line-height: 1.7;
-      margin-bottom: 60px;
-    }
+  /* ---------- TESTIMONIALS ---------- */
+  .testimonials{background:var(--sage-pale);}
+  .quote-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line);}
+  @media(max-width:860px){.quote-grid{grid-template-columns:1fr;}}
+  .quote-card{background:var(--surface); padding:36px 30px;}
+  .quote-mark{font-family:var(--display); font-style:italic; font-size:48px; color:var(--sage-light); line-height:1; margin-bottom:8px;}
+  .quote-card p{font-size:15px; line-height:1.6; color:var(--ink); margin-bottom:22px;}
+  .quote-who strong{color:var(--ink); font-weight:600; font-family:var(--body); font-size:13.5px; display:block; margin-bottom:2px;}
+  .quote-who span{font-family:var(--mono); font-size:11px; letter-spacing:.03em; color:var(--ink-soft);}
 
-    /* ─── Stats bar ─── */
-    .stats-bar {
-      display: flex;
-      gap: 0;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      overflow: hidden;
-      margin-top: -20px;
-      margin-bottom: 100px;
-      position: relative;
-      z-index: 3;
-    }
-    .stat-item {
-      flex: 1;
-      padding: 32px 24px;
-      text-align: center;
-      border-right: 1px solid var(--border);
-      position: relative;
-    }
-    .stat-item:last-child { border-right: none; }
-    .stat-number {
-      font-size: 42px;
-      font-weight: 900;
-      letter-spacing: -1px;
-      background: linear-gradient(135deg, var(--cyan), var(--blue));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      font-family: var(--mono);
-    }
-    .stat-label { color: var(--muted); font-size: 13px; font-weight: 500; margin-top: 4px; }
+  /* ---------- FEEDBACK ---------- */
+  .feedback-wrap{display:grid; grid-template-columns:.85fr 1.15fr; gap:56px; align-items:start;}
+  @media(max-width:860px){.feedback-wrap{grid-template-columns:1fr;}}
+  .feedback-form{background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:32px;}
+  .field{margin-bottom:18px;}
+  .field label{display:block; font-family:var(--mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px;}
+  .field input, .field textarea{
+    width:100%; font-family:var(--body); font-size:14.5px; color:var(--ink);
+    background:var(--bg); border:1px solid var(--line); border-radius:2px; padding:12px 14px;
+    transition:border-color .2s var(--ease);
+  }
+  .field input:focus, .field textarea:focus{outline:none; border-color:var(--sage);}
+  .field textarea{min-height:110px; resize:vertical; font-family:var(--body); line-height:1.5;}
+  .feedback-note{font-size:12.5px; color:var(--ink-soft); margin-top:14px; line-height:1.6;}
+  .feedback-note code{font-family:var(--mono); background:var(--sage-pale); padding:1px 5px; border-radius:2px; color:var(--sage);}
+  .feedback-success{display:none; text-align:center; padding:46px 20px; background:var(--surface); border:1px solid var(--line); border-radius:4px;}
+  .feedback-success.show{display:block;}
+  .feedback-success .mark{
+    width:40px; height:40px; border-radius:50%; background:var(--sage-pale); color:var(--sage);
+    display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:18px;
+  }
+  .feedback-success h4{font-family:var(--display); font-weight:480; font-size:20px; margin-bottom:6px;}
+  .feedback-success p{color:var(--ink-soft); font-size:14px;}
 
-    /* ─── Features ─── */
-    .features-header { text-align: center; margin-bottom: 60px; }
-    .features-header .section-lead { margin: 0 auto 0; }
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 24px;
-    }
-    .feature-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 32px;
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    .feature-card::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 20px;
-      opacity: 0;
-      transition: opacity 0.3s;
-      background: radial-gradient(circle at top left, rgba(34,211,238,0.08), transparent 60%);
-    }
-    .feature-card:hover::before { opacity: 1; }
-    .feature-card:hover {
-      border-color: rgba(34,211,238,0.25);
-      transform: translateY(-4px);
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-    .feature-icon {
-      width: 52px; height: 52px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      margin-bottom: 20px;
-    }
-    .feature-card h3 {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 10px;
-    }
-    .feature-card p {
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.7;
-    }
-    .feature-card.wide { grid-column: span 2; }
+  /* ---------- FOOTER ---------- */
+  footer{border-top:1px solid var(--line); padding:56px 0 40px;}
+  .foot-grid{display:flex; justify-content:space-between; gap:40px; flex-wrap:wrap;}
+  .foot-note{max-width:480px; font-size:13px; color:var(--ink-soft); line-height:1.6;}
+  .foot-links{display:flex; gap:28px; font-size:13px;}
+  .foot-links a{color:var(--ink-soft); text-decoration:none;}
+  .foot-links a:hover{color:var(--sage);}
+  .foot-bottom{margin-top:36px; font-family:var(--mono); font-size:11px; color:#A6A49A;}
 
-    /* ─── How it works ─── */
-    .how-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 80px;
-      align-items: center;
-    }
-    .steps-list { display: flex; flex-direction: column; gap: 0; }
-    .step {
-      display: flex;
-      gap: 20px;
-      padding: 24px 0;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .step:last-child { border-bottom: none; }
-    .step:hover .step-title { color: var(--cyan); }
-    .step-num {
-      width: 40px; height: 40px;
-      border-radius: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 14px;
-      color: var(--muted);
-      font-family: var(--mono);
-      flex-shrink: 0;
-      transition: all 0.2s;
-    }
-    .step.active .step-num {
-      background: linear-gradient(135deg, var(--cyan), var(--blue));
-      border-color: transparent;
-      color: white;
-    }
-    .step-title { font-weight: 600; font-size: 16px; margin-bottom: 6px; transition: color 0.2s; }
-    .step-desc { font-size: 14px; color: var(--muted); line-height: 1.6; }
-    .how-visual {
-      position: relative;
-    }
-    .terminal {
-      background: #0d1117;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 40px 80px rgba(0,0,0,0.5);
-    }
-    .terminal-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(255,255,255,0.02);
-    }
-    .dot { width: 12px; height: 12px; border-radius: 50%; }
-    .dot-r { background: #ff5f57; }
-    .dot-y { background: #febc2e; }
-    .dot-g { background: #28c840; }
-    .terminal-title { font-size: 12px; color: var(--muted); margin-left: auto; margin-right: auto; font-family: var(--mono); }
-    .terminal-body { padding: 24px; font-family: var(--mono); font-size: 13px; line-height: 1.8; }
-    .t-comment { color: #4b5563; }
-    .t-key { color: #a78bfa; }
-    .t-val { color: #34d399; }
-    .t-str { color: #fbbf24; }
-    .t-num { color: #22d3ee; }
-    .t-label { color: var(--muted); }
-    .t-warn { color: #fb923c; }
-    .blink { animation: blink 1s step-end infinite; }
-    @keyframes blink { 50% { opacity: 0; } }
-
-    /* ─── Tech stack ─── */
-    .tech-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-    }
-    .tech-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 28px 24px;
-      text-align: center;
-      transition: all 0.3s;
-    }
-    .tech-card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(255,255,255,0.15);
-    }
-    .tech-card-icon { font-size: 36px; margin-bottom: 14px; }
-    .tech-card h4 { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
-    .tech-card p { font-size: 13px; color: var(--muted); }
-
-    /* ─── Live demo section ─── */
-    .demo-section {
-      text-align: center;
-      padding: 100px 0;
-    }
-    .demo-card {
-      background: linear-gradient(135deg, rgba(34,211,238,0.08), rgba(59,130,246,0.08), rgba(139,92,246,0.08));
-      border: 1px solid rgba(34,211,238,0.2);
-      border-radius: 28px;
-      padding: 80px 40px;
-      position: relative;
-      overflow: hidden;
-    }
-    .demo-card::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle at center, rgba(34,211,238,0.06) 0%, transparent 60%);
-      pointer-events: none;
-    }
-    .demo-card h2 { margin-bottom: 16px; }
-    .demo-card p { color: var(--muted); max-width: 500px; margin: 0 auto 40px; font-size: 18px; }
-    .demo-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-
-    /* ─── Footer ─── */
-    footer {
-      padding: 48px 0;
-      border-top: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
-      position: relative;
-      z-index: 2;
-    }
-    .footer-copy { color: var(--muted); font-size: 14px; }
-    .footer-links { display: flex; gap: 24px; }
-    .footer-links a { color: var(--muted); text-decoration: none; font-size: 14px; transition: color 0.2s; }
-    .footer-links a:hover { color: var(--text); }
-
-    /* ─── Scan line animation ─── */
-    .scan-overlay {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      overflow: hidden;
-      border-radius: inherit;
-    }
-    .scan-line {
-      position: absolute;
-      left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
-      opacity: 0.6;
-      animation: scan 4s linear infinite;
-    }
-    @keyframes scan {
-      0%   { top: 0%; }
-      100% { top: 100%; }
-    }
-
-    /* ─── Divider ─── */
-    .divider {
-      height: 1px;
-      background: linear-gradient(90deg, transparent, var(--border), transparent);
-      margin: 0 auto;
-    }
-
-    /* ─── Pill tags ─── */
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .pill-cyan { background: rgba(34,211,238,0.12); color: var(--cyan); }
-    .pill-purple { background: rgba(139,92,246,0.12); color: var(--purple); }
-    .pill-green { background: rgba(16,185,129,0.12); color: var(--green); }
-
-    /* ─── Responsive ─── */
-    @media (max-width: 900px) {
-      .hero-grid { grid-template-columns: 1fr; }
-      .hero-visual { display: none; }
-      .features-grid { grid-template-columns: 1fr; }
-      .feature-card.wide { grid-column: span 1; }
-      .how-grid { grid-template-columns: 1fr; }
-      .tech-grid { grid-template-columns: repeat(2, 1fr); }
-      .stats-bar { flex-wrap: wrap; }
-      .stat-item { border-right: none; border-bottom: 1px solid var(--border); }
-      .nav-links { display: none; }
-    }
-
-    /* ─── Scroll animations ─── */
-    .fade-up {
-      opacity: 0;
-      transform: translateY(30px);
-      transition: opacity 0.6s ease, transform 0.6s ease;
-    }
-    .fade-up.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* ─── Glow line border ─── */
-    .glow-border {
-      position: relative;
-    }
-    .glow-border::after {
-      content: '';
-      position: absolute;
-      inset: -1px;
-      border-radius: inherit;
-      padding: 1px;
-      background: linear-gradient(135deg, var(--cyan), var(--blue), var(--purple));
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .glow-border:hover::after { opacity: 1; }
-
-    /* progress bar */
-    .progress-bar {
-      height: 4px;
-      border-radius: 2px;
-      background: var(--border);
-      overflow: hidden;
-      margin-top: 8px;
-    }
-    .progress-fill {
-      height: 100%;
-      border-radius: 2px;
-      background: linear-gradient(90deg, var(--cyan), var(--blue));
-      transition: width 1.5s ease;
-    }
-  </style>
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
+  }
+</style>
 </head>
 <body>
 
-<div class="ambient">
-  <div class="orb orb-1"></div>
-  <div class="orb orb-2"></div>
-  <div class="orb orb-3"></div>
-</div>
-<div class="noise"></div>
-
-<!-- ───── NAV ───── -->
-<nav id="nav">
-  <div class="container nav-inner">
-    <a href="#" class="logo">
-      <div class="logo-icon">🦴</div>
-      <span class="logo-text">Media<span>Spine</span></span>
-    </a>
-    <ul class="nav-links">
-      <li><a href="#features">Features</a></li>
-      <li><a href="#how-it-works">How It Works</a></li>
-      <li><a href="#tech">Tech Stack</a></li>
-    </ul>
-    <div class="nav-cta">
-      <a href="https://github.com/LaSserafim/mediaspine" target="_blank" class="btn btn-ghost" id="nav-github-btn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
-        GitHub
-      </a>
-      <a href="https://mediaspine.vercel.app" target="_blank" class="btn btn-primary" id="nav-demo-btn">
-        Launch App →
-      </a>
+<nav>
+  <div class="wrap">
+    <div class="logo">
+      <img src="logo.jpg" alt="MediaSpine DNA Logo">
+      <div>media<span>spine</span></div>
+    </div>
+    <div class="navlinks">
+      <a href="#how">How it works</a>
+      <a href="#metrics">Metrics</a>
+      <a href="#scan">Scan</a>
+      <a href="#feedback">Feedback</a>
+      <a href="#" class="btn btn-ghost" style="padding:9px 18px; font-size:13px;">SpineSafe NGO</a>
     </div>
   </div>
 </nav>
 
-<!-- ───── HERO ───── -->
-<section class="hero" id="hero">
-  <div class="container">
-    <div class="hero-grid">
-      <div class="hero-content">
-        <div class="hero-badge fade-up">
-          <div class="badge-dot"></div>
-          SpineSafe NGO Platform
-        </div>
-        <h1 class="fade-up" style="transition-delay:0.1s">
-          Clinical AI<br />
-          <span class="gradient-text">Posture &amp; Biometric</span><br />
-          Analysis
-        </h1>
-        <p class="hero-sub fade-up" style="transition-delay:0.2s">
-          Real-time, browser-based skeletal pose detection and facial biometric 
-          analysis — no installs, no backend. Powered by <strong>MediaPipe</strong> 
-          and <strong>Groq Llama-3</strong>.
-        </p>
-        <div class="hero-actions fade-up" style="transition-delay:0.3s">
-          <a href="https://mediaspine.vercel.app" target="_blank" class="btn btn-primary btn-lg" id="hero-launch-btn">
-            🚀 Launch Live App
-          </a>
-          <a href="https://github.com/LaSserafim/mediaspine" target="_blank" class="btn btn-ghost btn-lg" id="hero-github-btn">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
-            View Source
-          </a>
-        </div>
-        <div class="fade-up" style="transition-delay:0.4s; margin-top:32px; display:flex; gap:16px; flex-wrap:wrap;">
-          <span class="pill pill-cyan">🦴 Pose Detection</span>
-          <span class="pill pill-purple">😐 FaceMesh AI</span>
-          <span class="pill pill-green">🤖 Groq Llama-3</span>
-        </div>
+<header class="hero">
+  <div class="glow"></div>
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">Clinical AI posture screening</div>
+      <h1>Your posture,<br><em>measured</em>. Not guessed.</h1>
+      <p class="lede">MediaSpine reads posture and facial micro-tension straight from your webcam — no upload, no wearable, no waiting room. Built for the SpineSafe NGO to bring screening-grade assessment to every student and desk worker.</p>
+      <div class="hero-ctas">
+        <a href="#scan" class="btn btn-primary">Start free scan →</a>
+        <a href="#how" class="btn btn-ghost">See how it works</a>
       </div>
+    </div>
+    <div class="hero-photo">
+      <img src="hero.jpg" alt="Side profile of a person working at a desk showing posture">
 
-      <div class="hero-visual fade-up" style="transition-delay:0.3s">
-        <div class="metric-card mc-1">
-          <div class="metric-card-icon" style="background:rgba(34,211,238,0.15);">🦴</div>
-          <div>
-            <div class="metric-card-label">Shoulder Tilt</div>
-            <div class="metric-card-val" style="color:var(--cyan)">3.2°</div>
-          </div>
-        </div>
-        <div class="metric-card mc-2">
-          <div class="metric-card-icon" style="background:rgba(16,185,129,0.15);">😐</div>
-          <div>
-            <div class="metric-card-label">Stress Level</div>
-            <div class="metric-card-val" style="color:var(--green)">18%</div>
-          </div>
-        </div>
-        <div class="metric-card mc-3">
-          <div class="metric-card-icon" style="background:rgba(139,92,246,0.15);">🤖</div>
-          <div>
-            <div class="metric-card-label">AI Analysis</div>
-            <div class="metric-card-val" style="color:var(--purple)">Ready</div>
-          </div>
-        </div>
-        <div class="hero-image-wrap">
-          <div class="scan-overlay"><div class="scan-line"></div></div>
-          <img src="mediaspine_hero.jpg" alt="MediaSpine AI posture analysis visualization" />
-          <div class="hero-image-overlay"></div>
-        </div>
-      </div>
     </div>
   </div>
-</section>
+</header>
 
-<!-- ───── STATS ───── -->
-<div class="container">
-  <div class="stats-bar fade-up">
-    <div class="stat-item">
-      <div class="stat-number" data-target="8">0</div>
-      <div class="stat-label">Live Biometric Metrics</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-number" data-target="3">0</div>
-      <div class="stat-label">Second AI Snapshot</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-number" data-target="70">0</div>
-      <div class="stat-label">Billion Parameter Model</div>
-    </div>
-    <div class="stat-item">
-      <div class="stat-number" data-target="0">0</div>
-      <div class="stat-label">Backend Required</div>
-    </div>
+<div class="stats">
+  <div class="wrap">
+    <div class="stat-item reveal"><span class="num">8/10</span><span class="cap">Desk workers experience spinal strain</span></div>
+    <div class="stat-item reveal"><span class="num">+10 lbs</span><span class="cap">Spinal load per inch of forward tilt</span></div>
+    <div class="stat-item reveal"><span class="num">&lt;60s</span><span class="cap">Camera on to full clinical report</span></div>
+    <div class="stat-item reveal"><span class="num">100%</span><span class="cap">On-device privacy. Zero frames uploaded.</span></div>
   </div>
 </div>
 
-<div class="divider" style="max-width:1200px;"></div>
-
-<!-- ───── FEATURES ───── -->
-<section id="features">
-  <div class="container">
-    <div class="features-header">
-      <div class="section-tag">Capabilities</div>
-      <h2>Everything you need for<br /><span class="gradient-text">clinical posture assessment</span></h2>
-      <p class="section-lead">
-        A complete biometric analysis suite running entirely in your browser — 
-        no data leaves your device until you choose to export.
-      </p>
+<section id="how">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">The process</div>
+      <h2>Four steps, one webcam.</h2>
+      <p>Every reading happens in sequence, on-device — the same order every time, so the model always compares like against like.</p>
     </div>
-
-    <div class="features-grid">
-      <!-- card 1 - wide -->
-      <div class="feature-card wide glow-border fade-up">
-        <div class="feature-icon" style="background:rgba(34,211,238,0.12);">🦴</div>
-        <h3>Skeletal Pose Detection</h3>
-        <p>Using MediaPipe Pose, the app detects 33 full-body landmarks in real time. It calculates shoulder tilt angle, head tilt, neck deviation (profile &amp; frontal view), and flags postural imbalances frame by frame.</p>
-        <div style="margin-top:20px;">
-          <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-bottom:6px;">
-            <span>Detection accuracy</span><span style="color:var(--cyan)">97%+</span>
-          </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:0" data-width="97"></div></div>
-        </div>
-        <div style="margin-top:12px;">
-          <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-bottom:6px;">
-            <span>Latency</span><span style="color:var(--green)">&lt; 30ms per frame</span>
-          </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:0; background: linear-gradient(90deg, var(--green), #059669);" data-width="94"></div></div>
-        </div>
-      </div>
-
-      <!-- card 2 -->
-      <div class="feature-card glow-border fade-up" style="transition-delay:0.1s">
-        <div class="feature-icon" style="background:rgba(139,92,246,0.12);">😐</div>
-        <h3>FaceMesh Analytics</h3>
-        <p>Tracks 468 facial landmarks to compute Eye Aspect Ratio (EAR), Mouth Aspect Ratio (MAR), and brow tension — synthesized into a real-time Micro-Stress Level (0–100%) and emotion classification.</p>
-      </div>
-
-      <!-- card 3 -->
-      <div class="feature-card glow-border fade-up" style="transition-delay:0.05s">
-        <div class="feature-icon" style="background:rgba(251,191,36,0.12);">📊</div>
-        <h3>Live Dashboard</h3>
-        <p>8 biometric data cards update every frame — posture status, shoulder angle, head deviation, EAR, MAR, stress index, emotion label, and posture score — all visible at a glance.</p>
-      </div>
-
-      <!-- card 4 -->
-      <div class="feature-card glow-border fade-up" style="transition-delay:0.15s">
-        <div class="feature-icon" style="background:rgba(16,185,129,0.12);">🤖</div>
-        <h3>Groq AI Clinical Analysis</h3>
-        <p>After a 3-second stability snapshot, your anonymized biometric data is sent to Groq's <code style="font-family:var(--mono);font-size:12px;color:var(--cyan)">llama-3.3-70b-versatile</code> model for a full clinical report: current issues, future risks, and actionable recommendations.</p>
-      </div>
-
-      <!-- card 5 -->
-      <div class="feature-card glow-border fade-up" style="transition-delay:0.2s">
-        <div class="feature-icon" style="background:rgba(59,130,246,0.12);">📥</div>
-        <h3>CSV Export</h3>
-        <p>Download the complete AI-generated clinical report as a structured CSV file — ready to share with healthcare providers, integrate into EMR systems, or archive for longitudinal tracking.</p>
-      </div>
-
-      <!-- card 6 -->
-      <div class="feature-card glow-border fade-up" style="transition-delay:0.25s">
-        <div class="feature-icon" style="background:rgba(239,68,68,0.12);">🔒</div>
-        <h3>Privacy First</h3>
-        <p>All vision processing happens locally in your browser using Web Workers. Video frames never leave your device — only anonymized biometric numbers are sent to the AI when you trigger analysis.</p>
-      </div>
+    <div class="steps">
+      <div class="step reveal"><div class="num">01</div><h3>Face your camera</h3><p>Pose and 468-point facial landmarks track in real time, fully on-device.</p></div>
+      <div class="step reveal"><div class="num">02</div><h3>Hold for 3 seconds</h3><p>A stability snapshot captures shoulder tilt, neck angle, and micro-tension.</p></div>
+      <div class="step reveal"><div class="num">03</div><h3>Metrics are merged</h3><p>Pose and face signals combine into eight biometric readings, updated live.</p></div>
+      <div class="step reveal"><div class="num">04</div><h3>Get a clinical read</h3><p>A clinician-style AI model turns your numbers into a severity rating and fixes.</p></div>
     </div>
   </div>
 </section>
 
-<div class="divider" style="max-width:1200px; margin:0 auto;"></div>
+<section class="metrics-band" id="metrics">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">What gets measured</div>
+      <h2>Eight signals, read every frame.</h2>
+      <p>Sample readings from a single scan — profile view, seated at a desk.</p>
+    </div>
+    <div class="metric-grid">
+      <div class="metric reveal"><div class="label">Neck deviation</div><div class="val">14.2<small>°</small></div><span class="tag caution">Mild</span></div>
+      <div class="metric reveal"><div class="label">Shoulder tilt</div><div class="val">2.1<small>°</small></div><span class="tag good">Normal</span></div>
+      <div class="metric reveal"><div class="label">Head tilt</div><div class="val">1.4<small>°</small></div><span class="tag good">Normal</span></div>
+      <div class="metric reveal"><div class="label">Shoulder stability</div><div class="val">0.03<small>var</small></div><span class="tag good">Steady</span></div>
+      <div class="metric reveal"><div class="label">Head stability</div><div class="val">0.06<small>var</small></div><span class="tag caution">Drifting</span></div>
+      <div class="metric reveal"><div class="label">Micro-stress</div><div class="val">41<small>%</small></div><span class="tag caution">Elevated</span></div>
+      <div class="metric reveal"><div class="label">Emotion</div><div class="val" style="font-size:20px; padding-top:6px;">Neutral</div></div>
+      <div class="metric reveal"><div class="label">Blink rate</div><div class="val">17<small>/min</small></div><span class="tag good">Normal</span></div>
+    </div>
+  </div>
+</section>
 
-<!-- ───── HOW IT WORKS ───── -->
-<section id="how-it-works">
-  <div class="container">
-    <div class="how-grid">
+<section id="scan">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">The scanner</div>
+      <h2>Run a real scan.</h2>
+      <p>This preview simulates the 3-second stability snapshot and AI report — the live build connects the same flow to your camera and the Groq clinical model.</p>
+    </div>
+    <div class="scanner-wrap reveal">
       <div>
-        <div class="section-tag">Workflow</div>
-        <h2>How <span class="gradient-text">it works</span></h2>
-        <p class="section-lead" style="margin-bottom:32px;">
-          From camera access to clinical report in seconds — entirely in your browser.
-        </p>
-        <div class="steps-list">
-          <div class="step active" id="step-1">
-            <div class="step-num">01</div>
-            <div>
-              <div class="step-title">Open camera</div>
-              <div class="step-desc">Click "Start Camera" — MediaPipe Pose and FaceMesh models load via CDN and initialize simultaneously.</div>
-            </div>
-          </div>
-          <div class="step" id="step-2">
-            <div class="step-num">02</div>
-            <div>
-              <div class="step-title">Real-time biometric capture</div>
-              <div class="step-desc">The Web Worker processes every video frame off the main thread, computing 8+ biometric metrics without freezing the UI.</div>
-            </div>
-          </div>
-          <div class="step" id="step-3">
-            <div class="step-num">03</div>
-            <div>
-              <div class="step-title">Stability snapshot</div>
-              <div class="step-desc">Hold still for 3 seconds. The app captures a stable window of measurements and averages them for clinical reliability.</div>
-            </div>
-          </div>
-          <div class="step" id="step-4">
-            <div class="step-num">04</div>
-            <div>
-              <div class="step-title">AI clinical analysis</div>
-              <div class="step-desc">Anonymized biometric data is sent to Groq Llama-3 which generates a structured report: findings, risk factors, and recommendations.</div>
-            </div>
-          </div>
-          <div class="step" id="step-5">
-            <div class="step-num">05</div>
-            <div>
-              <div class="step-title">Export &amp; share</div>
-              <div class="step-desc">Download the full report as a CSV to share with clinicians or archive for longitudinal health tracking.</div>
-            </div>
-          </div>
+        <div class="cam-frame" id="camFrame">
+          <div class="cam-badge"><span class="rec"></span>PREVIEW FEED</div>
+          <svg viewBox="0 0 400 300">
+            <ellipse cx="200" cy="110" rx="46" ry="56" fill="none" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
+            <line x1="154" y1="150" x2="120" y2="230" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
+            <line x1="246" y1="150" x2="280" y2="230" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
+            <line x1="154" y1="150" x2="246" y2="150" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
+            <line x1="200" y1="150" x2="200" y2="240" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
+            <circle cx="154" cy="150" r="3" fill="#8FA89A"/>
+            <circle cx="246" cy="150" r="3" fill="#8FA89A"/>
+            <circle cx="200" cy="240" r="3" fill="#8FA89A"/>
+          </svg>
+          <div class="countdown" id="countdown">3</div>
+        </div>
+        <div class="scan-actions">
+          <button class="btn btn-primary" id="runScan">Take snapshot & AI evaluation</button>
+          <button class="btn btn-ghost" id="resetScan">Reset</button>
         </div>
       </div>
+      <div class="side-metrics">
+        <div class="side-metric"><span class="label">Neck deviation</span><span class="val">14.2°</span></div>
+        <div class="side-metric"><span class="label">Shoulder tilt</span><span class="val">2.1°</span></div>
+        <div class="side-metric"><span class="label">Stability</span><span class="val">0.06 var</span></div>
+        <div class="side-metric"><span class="label">Micro-stress</span><span class="val">41%</span></div>
+        <div class="side-metric"><span class="label">Emotion</span><span class="val">Neutral</span></div>
+      </div>
+    </div>
 
-      <div class="how-visual fade-up">
-        <div class="terminal">
-          <div class="terminal-header">
-            <div class="dot dot-r"></div>
-            <div class="dot dot-y"></div>
-            <div class="dot dot-g"></div>
-            <div class="terminal-title">mediaspine — clinical output</div>
-          </div>
-          <div class="terminal-body" id="terminal-body">
-            <div><span class="t-comment">// Snapshot captured — 3s average</span></div>
-            <div>&nbsp;</div>
-            <div><span class="t-key">const</span> <span class="t-val">metrics</span> = {</div>
-            <div>&nbsp; shoulderTilt: <span class="t-num">3.2</span>,   <span class="t-comment">// degrees</span></div>
-            <div>&nbsp; headTilt:     <span class="t-num">1.8</span>,</div>
-            <div>&nbsp; neckDeviation:<span class="t-num">4.1</span>,</div>
-            <div>&nbsp; EAR:          <span class="t-num">0.31</span>,  <span class="t-comment">// eye aspect ratio</span></div>
-            <div>&nbsp; MAR:          <span class="t-num">0.08</span>,  <span class="t-comment">// mouth aspect ratio</span></div>
-            <div>&nbsp; stressLevel:  <span class="t-num">18</span>,    <span class="t-comment">// %</span></div>
-            <div>&nbsp; emotion:      <span class="t-str">"neutral"</span>,</div>
-            <div>&nbsp; postureScore: <span class="t-num">84</span>,    <span class="t-comment">// /100</span></div>
-            <div>}</div>
-            <div>&nbsp;</div>
-            <div><span class="t-comment">// Groq Llama-3 response ↓</span></div>
-            <div>&nbsp;</div>
-            <div><span class="t-warn">⚠ Current:</span> Mild left shoulder elevation</div>
-            <div><span class="t-warn">⚠ Current:</span> Slight forward head posture</div>
-            <div>&nbsp;</div>
-            <div style="color:#f8fafc">✅ <strong>Risk:</strong> Low — maintain breaks</div>
-            <div style="color:var(--green)">💡 Rec: Chin tuck exercises daily</div>
-            <div>&nbsp;</div>
-            <div style="color:var(--muted)">📥 Export: report_2026-07-03.csv<span class="blink">█</span></div>
-          </div>
+    <div class="report" id="report">
+      <div class="report-top">
+        <div class="report-summary">
+          <div class="eyebrow">Clinical summary</div>
+          <p>Mild forward head posture with elevated facial micro-tension. Shoulders are level and stable, but head position drifts under sustained focus — consistent with prolonged screen work rather than a structural issue.</p>
+        </div>
+        <div class="severity-box">
+          <div class="eyebrow">Severity</div>
+          <div class="level">Mild</div>
+        </div>
+      </div>
+      <div class="report-grid">
+        <div class="report-cell issues">
+          <h4>Current issues</h4>
+          <p>14.2° neck deviation places the head noticeably forward of the shoulder line, and head stability variance (0.06) suggests difficulty holding a neutral position under load.</p>
+        </div>
+        <div class="report-cell risks">
+          <h4>Future risks</h4>
+          <p>Left uncorrected, sustained forward head posture increases cervical spine loading and is commonly associated with tension-type headaches within 6–12 months.</p>
+        </div>
+        <div class="report-cell recs">
+          <h4>Recommendations</h4>
+          <ol>
+            <li>Chin tucks — 3 sets of 10, holding 5 seconds, twice daily.</li>
+            <li>Raise your monitor to eye level to reduce forward reach.</li>
+            <li>90-second upper trapezius stretch every hour of screen time.</li>
+          </ol>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<div class="divider" style="max-width:1200px; margin:0 auto;"></div>
-
-<!-- ───── TECH STACK ───── -->
-<section id="tech">
-  <div class="container">
-    <div style="text-align:center; margin-bottom:60px;">
-      <div class="section-tag">Tech Stack</div>
-      <h2>Built with <span class="gradient-text">cutting-edge tools</span></h2>
-      <p class="section-lead" style="margin:0 auto;">
-        Zero build step, zero backend — a pure browser-native AI application.
-      </p>
+<section class="testimonials" id="testimonials">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">From early testers</div>
+      <h2>What people are noticing.</h2>
+      <p>Placeholder quotes for this preview — swap in real feedback once your first testers weigh in.</p>
     </div>
-    <div class="tech-grid">
-      <div class="tech-card glow-border fade-up">
-        <div class="tech-card-icon">🤖</div>
-        <h4>MediaPipe Pose</h4>
-        <p>33-landmark full-body skeletal tracking at 30fps</p>
+    <div class="quote-grid">
+      <div class="quote-card reveal">
+        <div class="quote-mark">"</div>
+        <p>I didn't realize how far forward my neck was until I saw the angle on screen. Fixed my monitor height that same day.</p>
+        <div class="quote-who"><strong>Rani A.</strong><span>Computer science student</span></div>
       </div>
-      <div class="tech-card glow-border fade-up" style="transition-delay:0.1s">
-        <div class="tech-card-icon">👁️</div>
-        <h4>MediaPipe FaceMesh</h4>
-        <p>468-point facial geometry for micro-expression analysis</p>
+      <div class="quote-card reveal">
+        <div class="quote-mark">"</div>
+        <p>Ran it during a staff wellness week — no camera awkwardness, no waiting room. Just open the page and go.</p>
+        <div class="quote-who"><strong>Dimas P.</strong><span>School health coordinator</span></div>
       </div>
-      <div class="tech-card glow-border fade-up" style="transition-delay:0.2s">
-        <div class="tech-card-icon">⚡</div>
-        <h4>Groq + Llama-3</h4>
-        <p>Ultra-fast 70B LLM inference for clinical AI reports</p>
-      </div>
-      <div class="tech-card glow-border fade-up" style="transition-delay:0.3s">
-        <div class="tech-card-icon">🎨</div>
-        <h4>Tailwind CSS</h4>
-        <p>Utility-first styling with a dark medical-grade UI</p>
-      </div>
-      <div class="tech-card glow-border fade-up" style="transition-delay:0.05s">
-        <div class="tech-card-icon">⚙️</div>
-        <h4>Web Workers</h4>
-        <p>Off-main-thread ML processing keeps the UI buttery smooth</p>
-      </div>
-      <div class="tech-card glow-border fade-up" style="transition-delay:0.15s">
-        <div class="tech-card-icon">🌐</div>
-        <h4>Vanilla JS</h4>
-        <p>No framework overhead — fast, lean, and dependency-free</p>
-      </div>
-      <div class="tech-card glow-border fade-up" style="transition-delay:0.25s">
-        <div class="tech-card-icon">▲</div>
-        <h4>Vercel</h4>
-        <p>Zero-config static deployment with global edge CDN</p>
-      </div>
-      <div class="tech-card glow-border fade-up" style="transition-delay:0.35s">
-        <div class="tech-card-icon">📊</div>
-        <h4>CSV Export</h4>
-        <p>Structured data output ready for clinical integration</p>
+      <div class="quote-card reveal">
+        <div class="quote-mark">"</div>
+        <p>The report reads like an actual physio wrote it, not a generic "sit up straight" reminder.</p>
+        <div class="quote-who"><strong>Farah N.</strong><span>Office worker</span></div>
       </div>
     </div>
   </div>
 </section>
 
-<div class="divider" style="max-width:1200px; margin:0 auto;"></div>
-
-<!-- ───── CTA ───── -->
-<section class="demo-section" id="demo">
-  <div class="container">
-    <div class="demo-card fade-up">
-      <div class="section-tag">Live Demo</div>
-      <h2>Try it — <span class="gradient-text">right now</span></h2>
-      <p>No login. No install. Just open the app in Chrome or Edge, allow camera access, and see your posture analyzed in real time.</p>
-      <div class="demo-actions">
-        <a href="https://mediaspine.vercel.app" target="_blank" class="btn btn-primary btn-lg" id="cta-launch-btn">
-          🚀 Open Live App
-        </a>
-        <a href="https://github.com/LaSserafim/mediaspine" target="_blank" class="btn btn-ghost btn-lg" id="cta-github-btn">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
-          Star on GitHub
-        </a>
+<section id="feedback">
+  <div class="wrap">
+    <div class="feedback-wrap">
+      <div class="section-head reveal" style="margin-bottom:0;">
+        <div class="eyebrow">Tell us what's wrong</div>
+        <h2>Help shape the next version.</h2>
+        <p>A bug, a confusing report, a metric you wish it tracked — send it straight to the team building MediaSpine.</p>
       </div>
-      <p style="margin-top:24px; font-size:13px; color:var(--muted);">
-        Works best in Chrome / Edge with a working webcam. Built for the SpineSafe NGO Platform.
-      </p>
+      <div class="reveal">
+        <form class="feedback-form" id="feedbackForm">
+          <div class="field"><label for="fbName">Name (optional)</label><input type="text" id="fbName" name="name"></div>
+          <div class="field"><label for="fbEmail">Email (optional)</label><input type="email" id="fbEmail" name="email"></div>
+          <div class="field"><label for="fbMsg">Message</label><textarea id="fbMsg" name="message" required placeholder="What happened, or what would help?"></textarea></div>
+          <button type="submit" class="btn btn-primary">Send feedback</button>
+          <p class="feedback-note">Goes straight to the MediaSpine team's inbox. This preview simulates the send — the live build posts to <code>/api/feedback</code>.</p>
+        </form>
+        <div class="feedback-success" id="feedbackSuccess">
+          <div class="mark">✓</div>
+          <h4>Thanks — that's on its way.</h4>
+          <p>We read every message.</p>
+        </div>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- ───── FOOTER ───── -->
-<div class="container">
-  <footer>
-    <div class="logo">
-      <div class="logo-icon">🦴</div>
-      <span class="logo-text">Media<span>Spine</span></span>
+<footer>
+  <div class="wrap foot-grid">
+    <p class="foot-note">MediaSpine is a screening tool based on 2D webcam analysis and AI interpretation. It is not a medical device, not a clinical diagnosis, and not a substitute for professional physiotherapy assessment. Built for the SpineSafe NGO Platform.</p>
+    <div class="foot-links">
+      <a href="#">GitHub</a>
+      <a href="#">SpineSafe NGO</a>
+      <a href="#">Privacy</a>
     </div>
-    <p class="footer-copy">SpineSafe NGO · 2026</p>
-    <div class="footer-links">
-      <a href="https://mediaspine.vercel.app" target="_blank">Live App</a>
-      <a href="https://github.com/LaSserafim/mediaspine" target="_blank">GitHub</a>
-    </div>
-  </footer>
-</div>
+  </div>
+  <div class="wrap foot-bottom">© 2026 MEDIASPINE — DESIGN PREVIEW, NOT FINAL COPY</div>
+</footer>
 
 <script>
-  // ── Navbar scroll effect
-  const nav = document.getElementById('nav');
-  window.addEventListener('scroll', () => {
-    nav.classList.toggle('scrolled', window.scrollY > 40);
+  // scroll reveal
+  const revealEls = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach((e,i)=>{
+      if(e.isIntersecting){
+        setTimeout(()=>e.target.classList.add('in'), (i%8)*80);
+        io.unobserve(e.target);
+      }
+    });
+  }, {threshold:.15});
+  revealEls.forEach(el=>io.observe(el));
+
+  // simulated scan flow
+  const runBtn = document.getElementById('runScan');
+  const resetBtn = document.getElementById('resetScan');
+  const countdown = document.getElementById('countdown');
+  const report = document.getElementById('report');
+
+  runBtn.addEventListener('click', ()=>{
+    let n = 3;
+    countdown.style.display = 'flex';
+    countdown.textContent = n;
+    runBtn.disabled = true;
+    const timer = setInterval(()=>{
+      n--;
+      if(n<=0){
+        clearInterval(timer);
+        countdown.style.display = 'none';
+        runBtn.disabled = false;
+        report.classList.add('show');
+        report.scrollIntoView({behavior:'smooth', block:'nearest'});
+        document.querySelectorAll('.report-cell, .report-summary, .severity-box').forEach((el,i)=>{
+          el.style.opacity = 0;
+          el.style.transform = 'translateY(10px)';
+          setTimeout(()=>{
+            el.style.transition = 'opacity .45s ease, transform .45s ease';
+            el.style.opacity = 1;
+            el.style.transform = 'translateY(0)';
+          }, i*100);
+        });
+      } else {
+        countdown.textContent = n;
+      }
+    }, 700);
   });
 
-  // ── Scroll-triggered fade-up
-  const fadeEls = document.querySelectorAll('.fade-up');
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        e.target.classList.add('visible');
-        observer.unobserve(e.target);
-      }
-    });
-  }, { threshold: 0.1 });
-  fadeEls.forEach(el => observer.observe(el));
+  resetBtn.addEventListener('click', ()=>report.classList.remove('show'));
 
-  // ── Animated counters
-  const counterEls = document.querySelectorAll('[data-target]');
-  const counterObs = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        const el = e.target;
-        const target = +el.dataset.target;
-        const suffix = el.dataset.suffix || '';
-        let start = 0;
-        const duration = 1500;
-        const step = (timestamp) => {
-          if (!start) start = timestamp;
-          const progress = Math.min((timestamp - start) / duration, 1);
-          const eased = 1 - Math.pow(1 - progress, 3);
-          el.textContent = Math.floor(eased * target) + suffix;
-          if (progress < 1) requestAnimationFrame(step);
-          else el.textContent = target + suffix;
-        };
-        requestAnimationFrame(step);
-        counterObs.unobserve(el);
-      }
-    });
-  }, { threshold: 0.5 });
-  counterEls.forEach(el => counterObs.observe(el));
+  // feedback form — this preview simulates the send.
+  // The live build swaps the commented block below in for the simulation,
+  // posting to the /api/feedback.js serverless function (see companion file).
+  const feedbackForm = document.getElementById('feedbackForm');
+  const feedbackSuccess = document.getElementById('feedbackSuccess');
+  feedbackForm.addEventListener('submit', (e)=>{
+    e.preventDefault();
 
-  // ── Progress bars
-  const bars = document.querySelectorAll('.progress-fill[data-width]');
-  const barObs = new IntersectionObserver((entries) => {
-    entries.forEach(e => {
-      if (e.isIntersecting) {
-        e.target.style.width = e.target.dataset.width + '%';
-        barObs.unobserve(e.target);
-      }
-    });
-  }, { threshold: 0.3 });
-  bars.forEach(b => barObs.observe(b));
+    // Live version:
+    // const res = await fetch('/api/feedback', {
+    //   method: 'POST',
+    //   headers: {'Content-Type':'application/json'},
+    //   body: JSON.stringify({
+    //     name: fbName.value, email: fbEmail.value, message: fbMsg.value
+    //   })
+    // });
 
-  // ── Step highlighter
-  const steps = document.querySelectorAll('.step');
-  let currentStep = 0;
-  steps.forEach((step, i) => {
-    step.addEventListener('click', () => {
-      steps.forEach(s => s.classList.remove('active'));
-      step.classList.add('active');
-    });
+    feedbackForm.style.display = 'none';
+    feedbackSuccess.classList.add('show');
   });
-
-  // Auto-cycle steps
-  setInterval(() => {
-    steps.forEach(s => s.classList.remove('active'));
-    currentStep = (currentStep + 1) % steps.length;
-    steps[currentStep].classList.add('active');
-  }, 3000);
-
-  // ── Typing effect for terminal on scroll
-  const terminal = document.querySelector('.terminal');
-  if (terminal) {
-    const termObs = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          terminal.style.opacity = '0';
-          terminal.style.transition = 'opacity 0.5s';
-          setTimeout(() => { terminal.style.opacity = '1'; }, 200);
-          termObs.unobserve(terminal);
-        }
-      });
-    }, { threshold: 0.3 });
-    termObs.observe(terminal);
-  }
 </script>
+
 </body>
 </html>
