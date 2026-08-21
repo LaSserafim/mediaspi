@@ -806,6 +806,29 @@ function updateUI(metrics) {
 /* ═══════════════════════════════════════════════════════════════════
    CAMERA START & LIFECYCLE
 ═══════════════════════════════════════════════════════════════════ */
+async function requestCameraStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // Check legacy browser fallback
+    const legacyGUM = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+    if (legacyGUM) {
+      return new Promise((resolve, reject) => {
+        legacyGUM.call(navigator, { video: true }, resolve, reject);
+      });
+    }
+    throw new Error('Webcam access requires a secure context (https:// or http://localhost:5173).');
+  }
+
+  // Try ideal resolution first, fallback to basic video if camera rejects specific dimensions
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } }
+    });
+  } catch (initialErr) {
+    console.warn('Initial camera constraints failed, attempting fallback:', initialErr);
+    return await navigator.mediaDevices.getUserMedia({ video: true });
+  }
+}
+
 startBtn.addEventListener('click', async () => {
   startBtn.disabled = true;
   startBtn.textContent = 'Starting…';
@@ -813,11 +836,20 @@ startBtn.addEventListener('click', async () => {
   try {
     initPoseWorker();
 
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 360 } }
-    });
+    cameraStream = await requestCameraStream();
     video.srcObject = cameraStream;
-    await video.play();
+
+    // Ensure video metadata is loaded before initiating playback
+    await new Promise((resolve) => {
+      if (video.readyState >= 2) {
+        resolve();
+      } else {
+        video.onloadeddata = () => resolve();
+        video.onloadedmetadata = () => resolve();
+      }
+    });
+
+    await video.play().catch(err => console.warn('Video play caught:', err));
 
     // Rendering optimization: mark scan active to disable expensive backdrop-filter on nav
     document.body.classList.add('cam-active');
@@ -828,9 +860,10 @@ startBtn.addEventListener('click', async () => {
 
     frameLoop();
   } catch (err) {
+    console.error('Camera initialization error:', err);
     startBtn.disabled = false;
     startBtn.textContent = 'Start camera';
-    alert('Could not access camera: ' + err.message);
+    alert('Camera error: ' + (err.message || err.name || 'Could not access webcam.'));
   }
 });
 
