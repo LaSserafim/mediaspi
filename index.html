@@ -586,41 +586,6 @@ const CONNECTIONS = [
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
-   CLIENT-SIDE SOFT RATE LIMIT (Daily Free Evaluations)
-═══════════════════════════════════════════════════════════════════ */
-const DAILY_EVAL_LIMIT = 5;
-
-function getTodayKey() {
-  const d = new Date();
-  return `mediaspine_eval_${d.getFullYear()}_${d.getMonth() + 1}_${d.getDate()}`;
-}
-
-function getRemainingEvals() {
-  const key = getTodayKey();
-  const count = parseInt(localStorage.getItem(key) || '0', 10);
-  return Math.max(0, DAILY_EVAL_LIMIT - count);
-}
-
-function consumeEvalQuota() {
-  const key = getTodayKey();
-  const count = parseInt(localStorage.getItem(key) || '0', 10);
-  localStorage.setItem(key, String(count + 1));
-  updateQuotaDisplay();
-}
-
-function updateQuotaDisplay() {
-  const remaining = getRemainingEvals();
-  setText(quotaCount, `${remaining}/${DAILY_EVAL_LIMIT} remaining`);
-  if (remaining === 0) {
-    limitNotice.classList.add('show');
-  } else {
-    limitNotice.classList.remove('show');
-  }
-}
-
-updateQuotaDisplay();
-
-/* ═══════════════════════════════════════════════════════════════════
    STATE & DIFF-BEFORE-WRITE CACHE
 ═══════════════════════════════════════════════════════════════════ */
 let worker          = null;
@@ -659,6 +624,41 @@ const perfStats = {
   longTasksCount: 0
 };
 window.__MEDIASPINE_PERF__ = perfStats;
+
+/* ═══════════════════════════════════════════════════════════════════
+   CLIENT-SIDE SOFT RATE LIMIT (Daily Free Evaluations)
+═══════════════════════════════════════════════════════════════════ */
+const DAILY_EVAL_LIMIT = 5;
+
+function getTodayKey() {
+  const d = new Date();
+  return `mediaspine_eval_${d.getFullYear()}_${d.getMonth() + 1}_${d.getDate()}`;
+}
+
+function getRemainingEvals() {
+  const key = getTodayKey();
+  const count = parseInt(localStorage.getItem(key) || '0', 10);
+  return Math.max(0, DAILY_EVAL_LIMIT - count);
+}
+
+function consumeEvalQuota() {
+  const key = getTodayKey();
+  const count = parseInt(localStorage.getItem(key) || '0', 10);
+  localStorage.setItem(key, String(count + 1));
+  updateQuotaDisplay();
+}
+
+function updateQuotaDisplay() {
+  const remaining = getRemainingEvals();
+  setText(quotaCount, `${remaining}/${DAILY_EVAL_LIMIT} remaining`);
+  if (remaining === 0) {
+    limitNotice.classList.add('show');
+  } else {
+    limitNotice.classList.remove('show');
+  }
+}
+
+updateQuotaDisplay();
 
 /* ═══════════════════════════════════════════════════════════════════
    WEB WORKER INITIALIZATION (Pose offloaded off main thread)
