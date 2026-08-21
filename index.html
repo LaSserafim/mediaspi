@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,340;0,9..144,480;0,9..144,560;1,9..144,420&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
+<!-- MediaPipe Pose (Main thread direct execution) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+
 <style>
   :root{
     --bg: #F6F4EE;
@@ -586,10 +589,52 @@ const CONNECTIONS = [
 ];
 
 /* ═══════════════════════════════════════════════════════════════════
+   POSE MATH CALCULATIONS
+═══════════════════════════════════════════════════════════════════ */
+function calculateAngle(ear, shoulder) {
+  return Math.atan(Math.abs(ear.x - shoulder.x) / Math.abs(ear.y - shoulder.y)) * (180 / Math.PI);
+}
+
+function analyzeFrontalPosture(lm) {
+  const leftEye = lm[1], rightEye = lm[4];
+  const leftShoulder = lm[11], rightShoulder = lm[12];
+  return {
+    shoulderTilt: Math.abs(leftShoulder.y - rightShoulder.y) * 100,
+    headTilt: Math.abs(leftEye.y - rightEye.y) * 100
+  };
+}
+
+function extractPoseMetrics(lm) {
+  const metrics = { poseDetected: true, poseLandmarks: lm };
+  const leftShoulder = lm[11], rightShoulder = lm[12];
+  const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x);
+
+  if (shoulderWidth < 0.15) {
+    // Profile view
+    const leftVis  = (lm[7].visibility || 0) + (lm[11].visibility || 0);
+    const rightVis = (lm[8].visibility || 0) + (lm[12].visibility || 0);
+    const isLeft   = leftVis > rightVis;
+    const ear      = isLeft ? lm[7]  : lm[8];
+    const shoulder = isLeft ? lm[11] : lm[12];
+    const angle    = calculateAngle(ear, shoulder);
+    metrics.neckDeviationAngle = isNaN(angle) ? null : angle;
+    metrics.shoulderTilt = null;
+    metrics.headTilt = null;
+  } else {
+    // Frontal view
+    const frontal = analyzeFrontalPosture(lm);
+    metrics.shoulderTilt = frontal.shoulderTilt;
+    metrics.headTilt = frontal.headTilt;
+    metrics.neckDeviationAngle = null;
+  }
+
+  return metrics;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    STATE & DIFF-BEFORE-WRITE CACHE
 ═══════════════════════════════════════════════════════════════════ */
-let worker          = null;
-let isProcessing    = false; // Frame lock pattern: ensures single in-flight worker frame
+let isProcessing    = false; // Frame lock pattern: prevents overlapping pose inferences
 let cameraStream    = null;
 let animFrameId     = null;
 let latestMetrics   = null;
@@ -620,7 +665,6 @@ const recentShoulderY = [];
 // Performance measurement stats
 const perfStats = {
   mainThreadTimes: [],
-  workerPoseTimes: [],
   longTasksCount: 0
 };
 window.__MEDIASPINE_PERF__ = perfStats;
@@ -661,54 +705,53 @@ function updateQuotaDisplay() {
 updateQuotaDisplay();
 
 /* ═══════════════════════════════════════════════════════════════════
-   WEB WORKER INITIALIZATION (Pose offloaded off main thread)
+   MEDIAPIPE POSE INITIALIZATION (Main Thread Direct Execution)
 ═══════════════════════════════════════════════════════════════════ */
-function initPoseWorker() {
-  if (worker) return;
-  worker = new Worker('worker.js');
+const pose = new Pose({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`
+});
 
-  worker.onmessage = (e) => {
-    const { type, metrics, message } = e.data;
-    if (type === 'pose_results') {
-      isProcessing = false; // Release frame lock
-      if (metrics) {
-        latestMetrics = metrics;
-        updateUI(metrics);
-      }
-    } else if (type === 'error') {
-      console.error('[worker error]', message);
-      isProcessing = false;
-    }
-  };
+pose.setOptions({
+  modelComplexity: 0,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
 
-  worker.onerror = (err) => {
-    console.error('[worker fatal error]', err);
-    isProcessing = false;
-  };
-}
+pose.onResults((results) => {
+  isProcessing = false; // Release frame lock
+  if (results.poseLandmarks) {
+    const metrics = extractPoseMetrics(results.poseLandmarks);
+    latestMetrics = metrics;
+    updateUI(metrics);
+  } else {
+    updateUI({ poseDetected: false });
+  }
+});
 
 /* ═══════════════════════════════════════════════════════════════════
-   CAMERA FRAME LOOP (Transferable ImageBitmap to Web Worker)
+   CAMERA FRAME LOOP (Direct Main-Thread Pose Inference)
 ═══════════════════════════════════════════════════════════════════ */
-function frameLoop() {
+async function frameLoop() {
   animFrameId = requestAnimationFrame(frameLoop);
 
-  // Frame lock: skip sending if worker is still computing previous frame
+  // Frame lock: skip sending if pose model is still processing previous frame
   if (isProcessing) return;
   if (video.readyState < 2 || video.videoWidth === 0) return;
 
   const t0 = performance.now();
   isProcessing = true;
 
-  createImageBitmap(video).then((bitmap) => {
-    const transferTime = performance.now() - t0;
-    perfStats.mainThreadTimes.push(transferTime);
+  try {
+    await pose.send({ image: video });
+    const dur = performance.now() - t0;
+    perfStats.mainThreadTimes.push(dur);
     if (perfStats.mainThreadTimes.length > 120) perfStats.mainThreadTimes.shift();
-
-    worker.postMessage({ type: 'process_frame', frame: bitmap }, [bitmap]);
-  }).catch(() => {
+  } catch (err) {
+    console.error('[pose] Inference error:', err);
     isProcessing = false;
-  });
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -834,8 +877,6 @@ startBtn.addEventListener('click', async () => {
   startBtn.textContent = 'Starting…';
 
   try {
-    initPoseWorker();
-
     cameraStream = await requestCameraStream();
     video.srcObject = cameraStream;
 
