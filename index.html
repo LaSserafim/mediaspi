@@ -7,6 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,340;0,9..144,480;0,9..144,560;1,9..144,420&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- MediaPipe (Direct, robust in-browser execution) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
+
 <style>
   :root{
     --bg: #F6F4EE;
@@ -49,6 +55,7 @@
   .btn-primary:hover{transform:scale(1.015); background:#3d5a4b;}
   .btn-ghost{background:transparent; color:var(--ink); border-color:var(--line);}
   .btn-ghost:hover{border-color:var(--sage); transform:scale(1.015);}
+  .btn:disabled{opacity:.5; cursor:not-allowed; transform:none;}
   button:focus-visible, a:focus-visible{outline:2px solid var(--sage); outline-offset:3px;}
 
   /* ---------- NAV ---------- */
@@ -80,15 +87,11 @@
   .hero p.lede{font-size:17.5px; color:var(--ink-soft); max-width:480px; margin:26px 0 34px;}
   .hero-ctas{display:flex; gap:14px; flex-wrap:wrap;}
 
-  /* signature hero photograph + live angle badge (replaces the standalone line-diagram) */
   .hero-photo{
     position:relative; border-radius:4px; overflow:hidden; aspect-ratio:4/5;
-    border:1px solid var(--line);
-    background:transparent;
+    border:1px solid var(--line); background:transparent;
   }
-  .hero-photo img{
-    width:100%; height:100%; object-fit:cover;
-  }
+  .hero-photo img{width:100%; height:100%; object-fit:cover;}
   .angle-badge{
     position:absolute; left:20px; bottom:20px; background:rgba(255,255,255,.92);
     backdrop-filter:blur(6px); border:1px solid var(--line); border-radius:2px;
@@ -97,11 +100,9 @@
   .angle-badge .val{font-family:var(--mono); font-size:22px; color:var(--sage);}
   .angle-badge .label{font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);}
 
-  /* ---------- STAT STRIP (numeric hook) ---------- */
+  /* ---------- STAT STRIP ---------- */
   .stats{border-top:1px solid var(--line); border-bottom:1px solid var(--line); background:var(--surface);}
-  .stats .wrap{
-    display:grid; grid-template-columns:repeat(4,1fr); padding:30px 32px;
-  }
+  .stats .wrap{display:grid; grid-template-columns:repeat(4,1fr); padding:30px 32px;}
   @media(max-width:760px){.stats .wrap{grid-template-columns:1fr 1fr; row-gap:24px;}}
   .stat-item{border-left:1px solid var(--line); padding-left:18px;}
   .stat-item:first-child{border-left:none; padding-left:0;}
@@ -149,23 +150,37 @@
     background:#1B1C19; border-radius:6px; aspect-ratio:4/3; position:relative; overflow:hidden;
     border:1px solid #2C2D28;
   }
-  .cam-frame svg{position:absolute; inset:0; width:100%; height:100%;}
+  .cam-frame video, .cam-frame canvas{
+    position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover;
+  }
   .cam-badge{
     position:absolute; top:16px; left:16px; font-family:var(--mono); font-size:10.5px; color:#fff;
     background:rgba(0,0,0,.4); padding:5px 10px; border-radius:20px; display:flex; align-items:center; gap:6px;
+    z-index:2;
   }
-  .cam-badge .rec{width:6px; height:6px; border-radius:50%; background:#E05B4E; animation:pulse 1.4s infinite;}
+  .cam-badge .rec{width:6px; height:6px; border-radius:50%; background:var(--brick); animation:pulse 1.4s infinite;}
   @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.3;}}
   .scan-actions{display:flex; gap:12px; margin-top:20px; flex-wrap:wrap;}
-  .countdown{
-    position:absolute; inset:0; display:none; align-items:center; justify-content:center;
-    font-family:var(--display); font-size:96px; color:#fff; background:rgba(0,0,0,.35);
+
+  .countdown-overlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.45); z-index:3;
+    opacity:0; pointer-events:none; transition:opacity .3s var(--ease);
   }
+  .countdown-overlay.active{opacity:1; pointer-events:auto;}
+  .countdown-inner{display:flex; flex-direction:column; align-items:center;}
+  .countdown-inner .cd-num{font-family:var(--display); font-size:96px; color:#fff; font-weight:480; transition:transform .15s var(--ease);}
+  .countdown-inner .cd-label{font-family:var(--mono); font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:rgba(255,255,255,.7); margin-top:8px;}
+
+  .cam-placeholder{position:absolute; inset:0; width:100%; height:100%; z-index:1;}
 
   .side-metrics{display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line);}
   .side-metric{background:var(--surface); padding:16px 20px; display:flex; justify-content:space-between; align-items:center;}
   .side-metric .label{font-size:13px; color:var(--ink-soft);}
   .side-metric .val{font-family:var(--mono); font-size:15px;}
+  .side-metric .val.good{color:var(--sage);}
+  .side-metric .val.caution{color:var(--amber);}
+  .side-metric .val.bad{color:var(--brick);}
 
   /* ---------- REPORT ---------- */
   .report{
@@ -194,6 +209,44 @@
   .report-cell.issues h4{color:var(--brick);}
   .report-cell.risks h4{color:var(--amber);}
   .report-cell.recs h4{color:var(--sage);}
+  .report-actions{padding:20px 28px; border-top:1px solid var(--line); display:flex; gap:12px; flex-wrap:wrap;}
+
+  .ai-loading{display:none; text-align:center; padding:48px 20px;}
+  .ai-loading.active{display:block;}
+  .ai-loading .spinner{
+    width:32px; height:32px; border:3px solid var(--line); border-top-color:var(--sage);
+    border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .ai-loading p{font-family:var(--mono); font-size:12px; color:var(--ink-soft); letter-spacing:.04em;}
+
+  /* ---------- PASSWORD MODAL ---------- */
+  .pw-modal{
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(28,29,27,.55); backdrop-filter:blur(8px);
+    align-items:center; justify-content:center;
+  }
+  .pw-modal.open{display:flex;}
+  .pw-box{
+    background:var(--surface); border:1px solid var(--line); border-radius:4px;
+    padding:36px 32px; width:min(380px, 90vw); text-align:center;
+  }
+  .pw-box h3{font-size:20px; margin-bottom:6px;}
+  .pw-box p{font-size:14px; color:var(--ink-soft); margin-bottom:24px;}
+  .pw-box input{
+    width:100%; padding:12px 14px; font-family:var(--mono); font-size:16px;
+    background:var(--bg); border:1px solid var(--line); border-radius:2px;
+    color:var(--ink); text-align:center; letter-spacing:.12em; outline:none;
+    transition:border-color .2s var(--ease);
+  }
+  .pw-box input:focus{border-color:var(--sage);}
+  .pw-error{color:var(--brick); font-size:13px; min-height:1.4em; margin:8px 0 16px;}
+  .pw-box .btn{width:100%; justify-content:center;}
+  .pw-cancel{
+    background:none; border:none; color:var(--ink-soft); font-size:13px;
+    cursor:pointer; margin-top:12px; display:block; width:100%; font-family:var(--body);
+  }
+  .pw-cancel:hover{color:var(--ink);}
 
   /* ---------- TESTIMONIALS ---------- */
   .testimonials{background:var(--sage-pale);}
@@ -275,7 +328,6 @@
     </div>
     <div class="hero-photo">
       <img src="hero.jpg" alt="Side profile of a person working at a desk showing posture">
-
     </div>
   </div>
 </header>
@@ -325,18 +377,23 @@
   </div>
 </section>
 
+<!-- ═══════════════════════════════════════════════════════════════════
+     LIVE SCANNER
+═══════════════════════════════════════════════════════════════════ -->
 <section id="scan">
   <div class="wrap">
     <div class="section-head reveal">
       <div class="eyebrow">The scanner</div>
       <h2>Run a real scan.</h2>
-      <p>This preview simulates the 3-second stability snapshot and AI report — the live build connects the same flow to your camera and the Groq clinical model.</p>
+      <p>Open your webcam, hold still for three seconds, and get an AI-generated clinical posture report — entirely on-device, nothing uploaded.</p>
     </div>
     <div class="scanner-wrap reveal">
       <div>
         <div class="cam-frame" id="camFrame">
-          <div class="cam-badge"><span class="rec"></span>PREVIEW FEED</div>
-          <svg viewBox="0 0 400 300">
+          <div class="cam-badge"><span class="rec"></span><span id="camStatus">CAMERA OFF</span></div>
+          <video id="cam" autoplay playsinline></video>
+          <canvas id="overlay"></canvas>
+          <svg class="cam-placeholder" id="camPlaceholder" viewBox="0 0 400 300">
             <ellipse cx="200" cy="110" rx="46" ry="56" fill="none" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
             <line x1="154" y1="150" x2="120" y2="230" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
             <line x1="246" y1="150" x2="280" y2="230" stroke="#4A6B5A" stroke-width="1.4" opacity=".8"/>
@@ -346,54 +403,72 @@
             <circle cx="246" cy="150" r="3" fill="#8FA89A"/>
             <circle cx="200" cy="240" r="3" fill="#8FA89A"/>
           </svg>
-          <div class="countdown" id="countdown">3</div>
+          <div class="countdown-overlay" id="countdownOverlay">
+            <div class="countdown-inner">
+              <div class="cd-num" id="countdownNum">3</div>
+              <div class="cd-label" id="countdownLabel">Hold still</div>
+            </div>
+          </div>
         </div>
         <div class="scan-actions">
-          <button class="btn btn-primary" id="runScan">Take snapshot & AI evaluation</button>
-          <button class="btn btn-ghost" id="resetScan">Reset</button>
+          <button class="btn btn-primary" id="startBtn">Start camera</button>
+          <button class="btn btn-ghost" id="snapshotBtn" disabled>Take snapshot & AI evaluation</button>
         </div>
       </div>
-      <div class="side-metrics">
-        <div class="side-metric"><span class="label">Neck deviation</span><span class="val">14.2°</span></div>
-        <div class="side-metric"><span class="label">Shoulder tilt</span><span class="val">2.1°</span></div>
-        <div class="side-metric"><span class="label">Stability</span><span class="val">0.06 var</span></div>
-        <div class="side-metric"><span class="label">Micro-stress</span><span class="val">41%</span></div>
-        <div class="side-metric"><span class="label">Emotion</span><span class="val">Neutral</span></div>
+      <div class="side-metrics" id="sideMetrics">
+        <div class="side-metric"><span class="label">Neck deviation</span><span class="val" id="mNeck">—</span></div>
+        <div class="side-metric"><span class="label">Shoulder tilt</span><span class="val" id="mShoulder">—</span></div>
+        <div class="side-metric"><span class="label">Head tilt</span><span class="val" id="mHead">—</span></div>
+        <div class="side-metric"><span class="label">Shoulder stability</span><span class="val" id="mShoulderStab">—</span></div>
+        <div class="side-metric"><span class="label">Head stability</span><span class="val" id="mHeadStab">—</span></div>
+        <div class="side-metric"><span class="label">Facial tension</span><span class="val" id="mStress">—</span></div>
+        <div class="side-metric"><span class="label">Emotion</span><span class="val" id="mEmotion">—</span></div>
+        <div class="side-metric"><span class="label">Blink count</span><span class="val" id="mBlinks">0</span></div>
       </div>
     </div>
 
+    <!-- AI Report -->
     <div class="report" id="report">
-      <div class="report-top">
-        <div class="report-summary">
-          <div class="eyebrow">Clinical summary</div>
-          <p>Mild forward head posture with elevated facial micro-tension. Shoulders are level and stable, but head position drifts under sustained focus — consistent with prolonged screen work rather than a structural issue.</p>
-        </div>
-        <div class="severity-box">
-          <div class="eyebrow">Severity</div>
-          <div class="level">Mild</div>
-        </div>
+      <div class="ai-loading" id="aiLoading">
+        <div class="spinner"></div>
+        <p>Synthesizing clinical biomechanics…</p>
       </div>
-      <div class="report-grid">
-        <div class="report-cell issues">
-          <h4>Current issues</h4>
-          <p>14.2° neck deviation places the head noticeably forward of the shoulder line, and head stability variance (0.06) suggests difficulty holding a neutral position under load.</p>
+      <div id="aiResults" style="display:none;">
+        <div class="report-top">
+          <div class="report-summary">
+            <div class="eyebrow">Clinical summary</div>
+            <p id="aiSummary"></p>
+          </div>
+          <div class="severity-box">
+            <div class="eyebrow">Severity</div>
+            <div class="level" id="aiSeverity"></div>
+          </div>
         </div>
-        <div class="report-cell risks">
-          <h4>Future risks</h4>
-          <p>Left uncorrected, sustained forward head posture increases cervical spine loading and is commonly associated with tension-type headaches within 6–12 months.</p>
+        <div class="report-grid">
+          <div class="report-cell issues"><h4>Current issues</h4><p id="aiCurrent"></p></div>
+          <div class="report-cell risks"><h4>Future risks</h4><p id="aiFuture"></p></div>
+          <div class="report-cell recs"><h4>Recommendations</h4><ol id="aiRecs"></ol></div>
         </div>
-        <div class="report-cell recs">
-          <h4>Recommendations</h4>
-          <ol>
-            <li>Chin tucks — 3 sets of 10, holding 5 seconds, twice daily.</li>
-            <li>Raise your monitor to eye level to reduce forward reach.</li>
-            <li>90-second upper trapezius stretch every hour of screen time.</li>
-          </ol>
+        <div class="report-actions">
+          <button class="btn btn-ghost" id="csvBtn">Download report (.csv)</button>
+          <button class="btn btn-ghost" id="resetBtn">Reset</button>
         </div>
       </div>
     </div>
   </div>
 </section>
+
+<!-- Password Modal -->
+<div class="pw-modal" id="pwModal" role="dialog" aria-modal="true" aria-labelledby="pwTitle">
+  <div class="pw-box">
+    <h3 id="pwTitle">🔒 Access Required</h3>
+    <p>Enter the access password to run the AI evaluation.</p>
+    <input id="pwInput" type="password" placeholder="••••••••" autocomplete="off" aria-label="Access password">
+    <div class="pw-error" id="pwError" aria-live="polite"></div>
+    <button class="btn btn-primary" id="pwSubmit">Unlock AI Evaluation</button>
+    <button class="pw-cancel" id="pwCancel">Cancel</button>
+  </div>
+</div>
 
 <section class="testimonials" id="testimonials">
   <div class="wrap">
@@ -457,78 +532,715 @@
       <a href="#">Privacy</a>
     </div>
   </div>
-  <div class="wrap foot-bottom">© 2026 MEDIASPINE — DESIGN PREVIEW, NOT FINAL COPY</div>
+  <div class="wrap foot-bottom">© 2026 MEDIASPINE</div>
 </footer>
 
 <script>
-  // scroll reveal
-  const revealEls = document.querySelectorAll('.reveal');
-  const io = new IntersectionObserver((entries)=>{
-    entries.forEach((e,i)=>{
-      if(e.isIntersecting){
-        setTimeout(()=>e.target.classList.add('in'), (i%8)*80);
-        io.unobserve(e.target);
+/* ═══════════════════════════════════════════════════════════════════
+   SCROLL REVEAL
+═══════════════════════════════════════════════════════════════════ */
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((e, i) => {
+    if (e.isIntersecting) {
+      setTimeout(() => e.target.classList.add('in'), (i % 8) * 80);
+      io.unobserve(e.target);
+    }
+  });
+}, { threshold: .15 });
+revealEls.forEach(el => io.observe(el));
+
+/* ═══════════════════════════════════════════════════════════════════
+   FEEDBACK FORM
+═══════════════════════════════════════════════════════════════════ */
+document.getElementById('feedbackForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  e.target.style.display = 'none';
+  document.getElementById('feedbackSuccess').classList.add('show');
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   DOM REFS
+═══════════════════════════════════════════════════════════════════ */
+const video       = document.getElementById('cam');
+const canvas      = document.getElementById('overlay');
+const ctx         = canvas.getContext('2d');
+const startBtn    = document.getElementById('startBtn');
+const snapshotBtn = document.getElementById('snapshotBtn');
+const camStatus   = document.getElementById('camStatus');
+const camPlaceholder = document.getElementById('camPlaceholder');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const countdownNum     = document.getElementById('countdownNum');
+const countdownLabel   = document.getElementById('countdownLabel');
+
+const mNeck        = document.getElementById('mNeck');
+const mShoulder    = document.getElementById('mShoulder');
+const mHead        = document.getElementById('mHead');
+const mShoulderStab = document.getElementById('mShoulderStab');
+const mHeadStab    = document.getElementById('mHeadStab');
+const mStress      = document.getElementById('mStress');
+const mEmotion     = document.getElementById('mEmotion');
+const mBlinks      = document.getElementById('mBlinks');
+
+const report      = document.getElementById('report');
+const aiLoading   = document.getElementById('aiLoading');
+const aiResults   = document.getElementById('aiResults');
+const aiSummary   = document.getElementById('aiSummary');
+const aiSeverity  = document.getElementById('aiSeverity');
+const aiCurrent   = document.getElementById('aiCurrent');
+const aiFuture    = document.getElementById('aiFuture');
+const aiRecs      = document.getElementById('aiRecs');
+const csvBtn      = document.getElementById('csvBtn');
+const resetBtn    = document.getElementById('resetBtn');
+
+const pwModal  = document.getElementById('pwModal');
+const pwInput  = document.getElementById('pwInput');
+const pwError  = document.getElementById('pwError');
+
+/* ═══════════════════════════════════════════════════════════════════
+   SKELETON CONNECTIONS
+═══════════════════════════════════════════════════════════════════ */
+const CONNECTIONS = [
+  [11,12],[11,13],[13,15],[12,14],[14,16],
+  [11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],
+  [0,1],[1,2],[2,3],[3,7],[0,4],[4,5],[5,6],[6,8],[9,10]
+];
+
+/* ═══════════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════════ */
+let isProcessing   = false;
+let frameCounter   = 0;
+let cameraInstance = null;
+let currentLandmarks = null;
+let latestMetrics  = null;
+let isRecording    = false;
+let lastAIData     = null;
+
+// Diff-before-write cache
+const prevText = {};
+function setText(el, text) {
+  const key = el.id || el;
+  if (prevText[key] === text) return;
+  prevText[key] = text;
+  el.textContent = text;
+}
+
+// Recording buffers (3-second snapshot)
+let shoulderYData = [];
+let noseXData = [];
+let noseYData = [];
+let stressData = [];
+let emotionData = [];
+
+// Live stability rolling windows
+const recentNoseX = [];
+const recentNoseY = [];
+const recentShoulderY = [];
+
+// FaceMesh stress history
+let earHistory = [];
+let marHistory = [];
+let browHistory = [];
+const HISTORY_LIMIT = 30;
+const EAR_MAX_VARIANCE = 0.2;
+const MAR_MAX_VARIANCE = 0.1;
+const BROW_MAX_VARIANCE = 0.05;
+
+// EMA pre-smoothing
+const EMA_ALPHA = 0.3;
+let earEma = null, marEma = null, browEma = null;
+
+// Personal baseline (calibrated at end of 3-sec snapshot)
+let stressBaseline = null;
+
+/* ═══════════════════════════════════════════════════════════════════
+   BLINK DETECTOR (EAR state machine)
+═══════════════════════════════════════════════════════════════════ */
+const EAR_THRESH = 0.21;
+const REFRACTORY_MS = 150;
+const BPS_WINDOW_MS = 10000;
+const LEFT_EYE  = [362, 385, 387, 263, 373, 380];
+const RIGHT_EYE = [33,  160, 158, 133, 153, 144];
+
+let blinkCount = 0;
+let blinkState = 'open';
+let lastBlinkTime = 0;
+const blinkTimestamps = [];
+
+function eyeAspectRatio(lm, idx) {
+  const v1 = dist(lm[idx[1]], lm[idx[5]]);
+  const v2 = dist(lm[idx[2]], lm[idx[4]]);
+  const h  = dist(lm[idx[0]], lm[idx[3]]);
+  return safeDivide(v1 + v2, 2.0 * h);
+}
+
+function detectBlink(lm) {
+  const ear = (eyeAspectRatio(lm, LEFT_EYE) + eyeAspectRatio(lm, RIGHT_EYE)) / 2;
+  const now = performance.now();
+
+  if (ear < EAR_THRESH) {
+    blinkState = 'closed';
+  } else if (blinkState === 'closed') {
+    blinkState = 'open';
+    if (now - lastBlinkTime >= REFRACTORY_MS) {
+      lastBlinkTime = now;
+      blinkCount++;
+      blinkTimestamps.push(now);
+    }
+  }
+
+  const cutoff = now - BPS_WINDOW_MS;
+  while (blinkTimestamps.length && blinkTimestamps[0] < cutoff) blinkTimestamps.shift();
+  setText(mBlinks, blinkCount);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MATH HELPERS
+═══════════════════════════════════════════════════════════════════ */
+function dist(p1, p2) {
+  return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
+}
+function safeDivide(n, d, fallback = 0) {
+  return Math.abs(d) < 1e-6 ? fallback : n / d;
+}
+function calcVariance(arr) {
+  if (!arr.length) return 0;
+  return Math.max(...arr) - Math.min(...arr);
+}
+function arrayStats(arr) {
+  if (!arr.length) return { mean: 0, std: 1 };
+  const mean = arr.reduce((s, v) => s + v, 0) / arr.length;
+  const std  = Math.sqrt(arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length) || 1e-6;
+  return { mean, std };
+}
+
+/* ─── Pose Math ─────────────────────────────────────────────────── */
+function extractPoseMetrics(lm) {
+  const metrics = { poseDetected: true, poseLandmarks: lm };
+  const leftShoulder = lm[11], rightShoulder = lm[12];
+  const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x);
+
+  if (shoulderWidth < 0.15) {
+    // Profile view
+    const leftVis  = (lm[7].visibility || 0) + (lm[11].visibility || 0);
+    const rightVis = (lm[8].visibility || 0) + (lm[12].visibility || 0);
+    const isLeft = leftVis > rightVis;
+    const ear = isLeft ? lm[7] : lm[8];
+    const shoulder = isLeft ? lm[11] : lm[12];
+    const angle = Math.atan(Math.abs(ear.x - shoulder.x) / Math.abs(ear.y - shoulder.y)) * (180 / Math.PI);
+    metrics.neckDeviationAngle = isNaN(angle) ? null : angle;
+    metrics.shoulderTilt = null;
+    metrics.headTilt = null;
+  } else {
+    // Frontal view
+    const leftEye = lm[1], rightEye = lm[4];
+    metrics.shoulderTilt = Math.abs(leftShoulder.y - rightShoulder.y) * 100;
+    metrics.headTilt = Math.abs(leftEye.y - rightEye.y) * 100;
+    metrics.neckDeviationAngle = null;
+  }
+  return metrics;
+}
+
+/* ─── FaceMesh Math ─────────────────────────────────────────────── */
+function extractFaceMetrics(lm) {
+  // EAR
+  const leftEyeWidth  = dist(lm[33], lm[133]);
+  const rightEyeWidth = dist(lm[362], lm[263]);
+  const leftEAR  = safeDivide(dist(lm[160], lm[144]) + dist(lm[158], lm[153]), 2.0 * leftEyeWidth);
+  const rightEAR = safeDivide(dist(lm[385], lm[380]) + dist(lm[387], lm[373]), 2.0 * rightEyeWidth);
+  const rawEar = (leftEAR + rightEAR) / 2.0;
+
+  // MAR
+  const mouthWidth = dist(lm[78], lm[308]);
+  const rawMar = safeDivide(dist(lm[13], lm[14]), mouthWidth);
+
+  // Brow tension
+  const rawBrow = dist(lm[55], lm[285]);
+
+  // EMA smoothing
+  earEma  = earEma  === null ? rawEar  : EMA_ALPHA * rawEar  + (1 - EMA_ALPHA) * earEma;
+  marEma  = marEma  === null ? rawMar  : EMA_ALPHA * rawMar  + (1 - EMA_ALPHA) * marEma;
+  browEma = browEma === null ? rawBrow : EMA_ALPHA * rawBrow + (1 - EMA_ALPHA) * browEma;
+
+  // Rolling history
+  earHistory.push(earEma);
+  marHistory.push(marEma);
+  browHistory.push(browEma);
+  if (earHistory.length  > HISTORY_LIMIT) earHistory.shift();
+  if (marHistory.length  > HISTORY_LIMIT) marHistory.shift();
+  if (browHistory.length > HISTORY_LIMIT) browHistory.shift();
+
+  // Stress 0-100
+  let earStress, marStress, browStress;
+  if (stressBaseline) {
+    const earVar  = calcVariance(earHistory);
+    const marVar  = calcVariance(marHistory);
+    const browVar = calcVariance(browHistory);
+    earStress  = Math.min(Math.max((earVar  - stressBaseline.earMean)  / stressBaseline.earStd,  0), 3) / 3;
+    marStress  = Math.min(Math.max((marVar  - stressBaseline.marMean)  / stressBaseline.marStd,  0), 3) / 3;
+    browStress = Math.min(Math.max((browVar - stressBaseline.browMean) / stressBaseline.browStd, 0), 3) / 3;
+  } else {
+    earStress  = Math.min(safeDivide(calcVariance(earHistory),  EAR_MAX_VARIANCE),  1);
+    marStress  = Math.min(safeDivide(calcVariance(marHistory),  MAR_MAX_VARIANCE),  1);
+    browStress = Math.min(safeDivide(calcVariance(browHistory), BROW_MAX_VARIANCE), 1);
+  }
+  const stressLevel = Math.round(((earStress + marStress + browStress) / 3) * 100);
+
+  // Emotion curvature
+  const mouthCenterY  = (lm[13].y + lm[14].y) / 2.0;
+  const mouthCornersY = (lm[61].y + lm[291].y) / 2.0;
+  const emotionCurvature = mouthCenterY - mouthCornersY;
+  const emotion = emotionCurvature > 0.015 ? 'Happy'
+                : emotionCurvature < -0.005 ? 'Tense/Sad'
+                : 'Neutral';
+
+  return { faceDetected: true, stressLevel, emotion, _faceLandmarks: lm, _freshLandmarks: true };
+}
+
+function calibrateBaseline() {
+  if (earHistory.length < 5 || marHistory.length < 5 || browHistory.length < 5) return;
+  const earS  = arrayStats(earHistory);
+  const marS  = arrayStats(marHistory);
+  const browS = arrayStats(browHistory);
+  stressBaseline = {
+    earMean: earS.mean, earStd: earS.std,
+    marMean: marS.mean, marStd: marS.std,
+    browMean: browS.mean, browStd: browS.std
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MEDIAPIPE MODEL INIT
+═══════════════════════════════════════════════════════════════════ */
+const pose = new Pose({
+  locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}`
+});
+pose.setOptions({
+  modelComplexity: 0,
+  smoothLandmarks: true,
+  enableSegmentation: false,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+const faceMesh = new FaceMesh({
+  locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${f}`
+});
+faceMesh.setOptions({
+  maxNumFaces: 1,
+  refineLandmarks: false,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+/* ─── Pending results (set by callbacks, consumed together) ──── */
+let pendingPose = null;
+let pendingFace = null;
+
+pose.onResults((results) => {
+  pendingPose = results.poseLandmarks
+    ? extractPoseMetrics(results.poseLandmarks)
+    : { poseDetected: false };
+  tryMergeAndUpdate();
+});
+
+faceMesh.onResults((results) => {
+  pendingFace = (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0)
+    ? { ...extractFaceMetrics(results.multiFaceLandmarks[0]), _freshLandmarks: true }
+    : { faceDetected: false, _freshLandmarks: true };
+  tryMergeAndUpdate();
+});
+
+function tryMergeAndUpdate() {
+  if (!pendingPose || !pendingFace) return;
+  const merged = { ...pendingPose, ...pendingFace };
+  pendingPose = null;
+  isProcessing = false;  // release frame lock
+  latestMetrics = merged;
+  updateUI(merged);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   UI UPDATE
+═══════════════════════════════════════════════════════════════════ */
+function updateUI(metrics) {
+  if (metrics.poseDetected && metrics.poseLandmarks) {
+    const lm = metrics.poseLandmarks;
+    currentLandmarks = lm;
+
+    // Sync canvas size
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw skeleton
+    ctx.strokeStyle = 'rgba(74,107,90,.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const [a, b] of CONNECTIONS) {
+      if (lm[a] && lm[b]) {
+        ctx.moveTo(lm[a].x * w, lm[a].y * h);
+        ctx.lineTo(lm[b].x * w, lm[b].y * h);
+      }
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = '#8FA89A';
+    ctx.beginPath();
+    for (const pt of lm) {
+      if (pt) {
+        ctx.moveTo(pt.x * w + 3, pt.y * h);
+        ctx.arc(pt.x * w, pt.y * h, 3, 0, Math.PI * 2);
+      }
+    }
+    ctx.fill();
+
+    // Enable snapshot button once pose is live
+    if (snapshotBtn.disabled && !isRecording) snapshotBtn.disabled = false;
+
+    // Record data during countdown
+    if (isRecording) {
+      shoulderYData.push((lm[11].y + lm[12].y) / 2);
+      noseXData.push(lm[0].x);
+      noseYData.push(lm[0].y);
+      if (metrics.stressLevel !== undefined) stressData.push(metrics.stressLevel);
+      if (metrics.emotion) emotionData.push(metrics.emotion);
+    }
+
+    // Live nose & shoulder stability
+    recentNoseX.push(lm[0].x);
+    recentNoseY.push(lm[0].y);
+    if (recentNoseX.length > 30) { recentNoseX.shift(); recentNoseY.shift(); }
+    const liveHeadStab = Math.max(
+      Math.max(...recentNoseX) - Math.min(...recentNoseX),
+      Math.max(...recentNoseY) - Math.min(...recentNoseY)
+    ) * 100;
+
+    const leftShoulder = lm[11], rightShoulder = lm[12];
+    if (leftShoulder && rightShoulder) {
+      recentShoulderY.push((leftShoulder.y + rightShoulder.y) / 2);
+      if (recentShoulderY.length > 30) { recentShoulderY.shift(); }
+    }
+    const liveShoulderStab = recentShoulderY.length > 1
+      ? (Math.max(...recentShoulderY) - Math.min(...recentShoulderY)) * 100
+      : 0;
+
+    // Metric cards — diff-before-write
+    if (metrics.neckDeviationAngle != null) {
+      setText(mNeck, metrics.neckDeviationAngle.toFixed(1) + '°');
+      setText(mShoulder, '—');
+      setText(mHead, '—');
+      mNeck.className = 'val ' + (metrics.neckDeviationAngle < 10 ? 'good' : metrics.neckDeviationAngle < 15 ? 'caution' : 'bad');
+    } else if (metrics.shoulderTilt != null) {
+      setText(mNeck, '—');
+      setText(mShoulder, metrics.shoulderTilt.toFixed(1) + '°');
+      setText(mHead, metrics.headTilt.toFixed(1) + '°');
+      mShoulder.className = 'val ' + (metrics.shoulderTilt < 2 ? 'good' : metrics.shoulderTilt < 4 ? 'caution' : 'bad');
+      mHead.className = 'val ' + (metrics.headTilt < 2 ? 'good' : metrics.headTilt < 4 ? 'caution' : 'bad');
+    }
+
+    setText(mShoulderStab, (liveShoulderStab / 100).toFixed(2) + ' var');
+    setText(mHeadStab, (liveHeadStab / 100).toFixed(2) + ' var');
+    mShoulderStab.className = 'val ' + (liveShoulderStab < 2 ? 'good' : liveShoulderStab < 5 ? 'caution' : 'bad');
+    mHeadStab.className = 'val ' + (liveHeadStab < 2 ? 'good' : liveHeadStab < 5 ? 'caution' : 'bad');
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Face metrics (always update when FaceMesh ran)
+  if (metrics.stressLevel !== undefined) {
+    setText(mStress, metrics.stressLevel + '%');
+    mStress.className = 'val ' + (metrics.stressLevel < 30 ? 'good' : metrics.stressLevel < 60 ? 'caution' : 'bad');
+  }
+  if (metrics.emotion) {
+    setText(mEmotion, metrics.emotion);
+    mEmotion.className = 'val ' + (metrics.emotion === 'Happy' ? 'good' : metrics.emotion === 'Neutral' ? '' : 'caution');
+  }
+  if (metrics.faceDetected && metrics._faceLandmarks && metrics._freshLandmarks) {
+    detectBlink(metrics._faceLandmarks);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CAMERA START
+═══════════════════════════════════════════════════════════════════ */
+startBtn.addEventListener('click', () => {
+  startBtn.disabled = true;
+  startBtn.textContent = 'Starting…';
+
+  if (!cameraInstance) {
+    cameraInstance = new Camera(video, {
+      facingMode: 'user',
+      width: 480,
+      height: 360,
+      onFrame: async () => {
+        if (isProcessing) return;
+        if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
+        isProcessing = true;
+        frameCounter++;
+        pendingPose = null;
+
+        // FaceMesh throttle: every 2nd frame
+        const runFace = (frameCounter % 2 === 0);
+        if (!runFace) {
+          if (pendingFace) pendingFace = { ...pendingFace, _freshLandmarks: false };
+          else pendingFace = { faceDetected: false, _freshLandmarks: false };
+        }
+
+        try {
+          await pose.send({ image: video });
+          if (runFace) await faceMesh.send({ image: video });
+        } catch (err) {
+          console.error('[frame] Processing error:', err);
+          isProcessing = false;
+          pendingPose = null;
+          if (runFace) pendingFace = null;
+        }
       }
     });
-  }, {threshold:.15});
-  revealEls.forEach(el=>io.observe(el));
+  }
 
-  // simulated scan flow
-  const runBtn = document.getElementById('runScan');
-  const resetBtn = document.getElementById('resetScan');
-  const countdown = document.getElementById('countdown');
-  const report = document.getElementById('report');
+  cameraInstance.start()
+    .then(() => {
+      camPlaceholder.style.display = 'none';
+      setText(camStatus, 'LIVE');
+      startBtn.textContent = 'Camera active';
+      // Reset blink state
+      blinkCount = 0;
+      blinkState = 'open';
+      lastBlinkTime = 0;
+      blinkTimestamps.length = 0;
+      setText(mBlinks, '0');
+    })
+    .catch((e) => {
+      startBtn.disabled = false;
+      startBtn.textContent = 'Start camera';
+      alert('Camera error: ' + e.message);
+    });
+});
 
-  runBtn.addEventListener('click', ()=>{
-    let n = 3;
-    countdown.style.display = 'flex';
-    countdown.textContent = n;
-    runBtn.disabled = true;
-    const timer = setInterval(()=>{
-      n--;
-      if(n<=0){
-        clearInterval(timer);
-        countdown.style.display = 'none';
-        runBtn.disabled = false;
-        report.classList.add('show');
-        report.scrollIntoView({behavior:'smooth', block:'nearest'});
-        document.querySelectorAll('.report-cell, .report-summary, .severity-box').forEach((el,i)=>{
-          el.style.opacity = 0;
-          el.style.transform = 'translateY(10px)';
-          setTimeout(()=>{
-            el.style.transition = 'opacity .45s ease, transform .45s ease';
-            el.style.opacity = 1;
-            el.style.transform = 'translateY(0)';
-          }, i*100);
-        });
-      } else {
-        countdown.textContent = n;
+/* ═══════════════════════════════════════════════════════════════════
+   PASSWORD GATE
+═══════════════════════════════════════════════════════════════════ */
+const CORRECT_PW = '12345';
+
+snapshotBtn.addEventListener('click', () => {
+  if (!currentLandmarks || isRecording) return;
+  pwInput.value = '';
+  pwError.textContent = '';
+  pwModal.classList.add('open');
+  setTimeout(() => pwInput.focus(), 50);
+});
+
+document.getElementById('pwCancel').addEventListener('click', () => pwModal.classList.remove('open'));
+pwModal.addEventListener('click', (e) => { if (e.target === pwModal) pwModal.classList.remove('open'); });
+pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitPassword(); });
+document.getElementById('pwSubmit').addEventListener('click', submitPassword);
+
+function submitPassword() {
+  if (pwInput.value === CORRECT_PW) {
+    pwModal.classList.remove('open');
+    startStabilitySnapshot();
+  } else {
+    pwError.textContent = 'Incorrect password. Try again.';
+    pwInput.value = '';
+    pwInput.focus();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   3-SECOND STABILITY SNAPSHOT
+═══════════════════════════════════════════════════════════════════ */
+function startStabilitySnapshot() {
+  if (!currentLandmarks || isRecording) return;
+  isRecording = true;
+  shoulderYData = [];
+  noseXData = [];
+  noseYData = [];
+  stressData = [];
+  emotionData = [];
+  snapshotBtn.disabled = true;
+
+  let count = 3;
+  countdownNum.textContent = count;
+  countdownLabel.textContent = 'Hold still';
+  countdownOverlay.classList.add('active');
+
+  const timer = setInterval(() => {
+    count--;
+    if (count > 0) {
+      countdownNum.textContent = count;
+      countdownNum.style.transform = 'scale(1.15)';
+      setTimeout(() => countdownNum.style.transform = 'scale(1)', 150);
+    } else {
+      clearInterval(timer);
+      countdownNum.textContent = '✓';
+      countdownLabel.textContent = 'Analyzing';
+      isRecording = false;
+      calibrateBaseline();
+
+      const sMax = Math.max(...shoulderYData), sMin = Math.min(...shoulderYData);
+      const shoulderStability = shoulderYData.length ? (sMax - sMin) * 100 : 0;
+      const nxMax = Math.max(...noseXData), nxMin = Math.min(...noseXData);
+      const nyMax = Math.max(...noseYData), nyMin = Math.min(...noseYData);
+      const headStability = noseXData.length ? Math.max(nxMax - nxMin, nyMax - nyMin) * 100 : 0;
+
+      const avgStress = stressData.length ? stressData.reduce((a, b) => a + b, 0) / stressData.length : 0;
+      let dominantEmotion = 'Neutral';
+      if (emotionData.length) {
+        const counts = {};
+        let maxC = 0;
+        emotionData.forEach(e => { counts[e] = (counts[e] || 0) + 1; if (counts[e] > maxC) { maxC = counts[e]; dominantEmotion = e; } });
       }
-    }, 700);
-  });
 
-  resetBtn.addEventListener('click', ()=>report.classList.remove('show'));
+      runAIEvaluation(shoulderStability, headStability, avgStress, dominantEmotion);
 
-  // feedback form — this preview simulates the send.
-  // The live build swaps the commented block below in for the simulation,
-  // posting to the /api/feedback.js serverless function (see companion file).
-  const feedbackForm = document.getElementById('feedbackForm');
-  const feedbackSuccess = document.getElementById('feedbackSuccess');
-  feedbackForm.addEventListener('submit', (e)=>{
-    e.preventDefault();
+      setTimeout(() => countdownOverlay.classList.remove('active'), 1000);
+    }
+  }, 1000);
+}
 
-    // Live version:
-    // const res = await fetch('/api/feedback', {
-    //   method: 'POST',
-    //   headers: {'Content-Type':'application/json'},
-    //   body: JSON.stringify({
-    //     name: fbName.value, email: fbEmail.value, message: fbMsg.value
-    //   })
-    // });
+/* ═══════════════════════════════════════════════════════════════════
+   GROQ AI EVALUATION
+═══════════════════════════════════════════════════════════════════ */
+async function runAIEvaluation(shoulderStability, headStability, avgStress, dominantEmotion) {
+  if (!latestMetrics) return;
 
-    feedbackForm.style.display = 'none';
-    feedbackSuccess.classList.add('show');
-  });
+  report.classList.add('show');
+  aiLoading.classList.add('active');
+  aiResults.style.display = 'none';
+  report.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  const metrics = { ...latestMetrics };
+
+  try {
+    const payloadParts = [
+      metrics.neckDeviationAngle != null ? `Neck Deviation: ${metrics.neckDeviationAngle.toFixed(1)}°` : null,
+      metrics.shoulderTilt != null ? `Shoulder Tilt: ${metrics.shoulderTilt.toFixed(1)}°, Head Tilt: ${metrics.headTilt.toFixed(1)}°` : null,
+      `Shoulder Stability: ${(shoulderStability / 100).toFixed(2)} variance`,
+      `Head Stability: ${(headStability / 100).toFixed(2)} variance`,
+      `Facial Tension Index: ${avgStress.toFixed(1)}%`,
+      `Facial Emotion: ${dominantEmotion}`
+    ].filter(Boolean).join(', ');
+
+    const response = await fetch('/api/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload: payloadParts })
+    });
+
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+    const data = await response.json();
+
+    let aiJsonStr = data.choices[0].message.content.trim()
+      .replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+    const parsed = JSON.parse(aiJsonStr);
+
+    const safe = (val) => {
+      if (!val) return 'N/A';
+      if (Array.isArray(val)) return val.join(' | ');
+      if (typeof val === 'object') return JSON.stringify(val);
+      return String(val);
+    };
+
+    aiLoading.classList.remove('active');
+    aiResults.style.display = 'block';
+
+    setText(aiSummary, safe(parsed.summary));
+    setText(aiSeverity, safe(parsed.severity));
+    setText(aiCurrent, safe(parsed.current_issues));
+    setText(aiFuture, safe(parsed.future_risks));
+
+    aiRecs.innerHTML = '';
+    const recs = Array.isArray(parsed.recommendations) ? parsed.recommendations : [safe(parsed.recommendations)];
+    recs.forEach((rec) => {
+      const li = document.createElement('li');
+      li.textContent = rec;
+      aiRecs.appendChild(li);
+    });
+
+    // Animate report cells
+    document.querySelectorAll('.report-cell, .report-summary, .severity-box').forEach((el, i) => {
+      el.style.opacity = 0;
+      el.style.transform = 'translateY(10px)';
+      setTimeout(() => {
+        el.style.transition = 'opacity .45s ease, transform .45s ease';
+        el.style.opacity = 1;
+        el.style.transform = 'translateY(0)';
+      }, i * 100);
+    });
+
+    lastAIData = {
+      metrics: {
+        ...metrics,
+        'Shoulder Stability': shoulderStability / 100,
+        'Head Stability': headStability / 100,
+        'Average Stress': avgStress,
+        'Dominant Emotion': dominantEmotion
+      },
+      parsed,
+      timestamp: new Date()
+    };
+  } catch (err) {
+    console.error('AI evaluation error:', err);
+    aiLoading.classList.remove('active');
+    aiResults.style.display = 'block';
+    setText(aiSummary, 'Error during AI analysis: ' + err.message);
+  } finally {
+    if (!isRecording) snapshotBtn.disabled = false;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CSV EXPORT (RFC 4180)
+═══════════════════════════════════════════════════════════════════ */
+csvBtn.addEventListener('click', () => {
+  if (!lastAIData) return;
+  const { metrics, parsed, timestamp } = lastAIData;
+
+  let metricsFmt = '';
+  if (metrics.neckDeviationAngle != null) {
+    metricsFmt = `Neck Deviation Angle: ${metrics.neckDeviationAngle.toFixed(2)}°`;
+  } else if (metrics.shoulderTilt != null) {
+    metricsFmt = `Shoulder Tilt: ${metrics.shoulderTilt.toFixed(2)}°; Head Tilt: ${metrics.headTilt.toFixed(2)}°`;
+  } else {
+    metricsFmt = 'N/A';
+  }
+  metricsFmt += `; Shoulder Stability: ${metrics['Shoulder Stability']?.toFixed(2)}; Head Stability: ${metrics['Head Stability']?.toFixed(2)}; Avg Stress: ${metrics['Average Stress']?.toFixed(1)}%; Emotion: ${metrics['Dominant Emotion']}`;
+
+  const esc = (s) => {
+    if (!s) return '"N/A"';
+    return `"${s.toString().replace(/"/g, '""')}"`;
+  };
+
+  const tsStr = timestamp.toLocaleString().replace(/,/g, '');
+  const header = 'Timestamp,Severity,Captured Metrics,Summary,Current Issues,Future Risks,Recommendations';
+  const row = [esc(tsStr), esc(parsed.severity), esc(metricsFmt), esc(parsed.summary), esc(parsed.current_issues), esc(parsed.future_risks), esc(Array.isArray(parsed.recommendations) ? parsed.recommendations.join(' | ') : parsed.recommendations)].join(',');
+  const csv = header + '\n' + row + '\n';
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: `MediaSpine_Report_${timestamp.toISOString().replace(/[:.]/g, '-')}.csv` });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════════════════════════════ */
+resetBtn.addEventListener('click', () => {
+  report.classList.remove('show');
+  aiLoading.classList.remove('active');
+  aiResults.style.display = 'none';
+  lastAIData = null;
+});
 </script>
 
 </body>
