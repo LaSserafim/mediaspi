@@ -285,12 +285,115 @@
   .foot-links a:hover{color:var(--sage);}
   .foot-bottom{margin-top:36px; font-family:var(--mono); font-size:11px; color:#A6A49A;}
 
+  /* ---------- MY PROGRESS SECTION ---------- */
+  .progress-section{background:var(--surface); border-top:1px solid var(--line); border-bottom:1px solid var(--line); display:none;}
+  .progress-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line); margin-bottom:36px;}
+  @media(max-width:760px){.progress-stats{grid-template-columns:1fr;}}
+  .progress-stat-item{background:var(--bg); padding:26px 24px;}
+  .progress-stat-item .label{font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); display:block; margin-bottom:8px;}
+  .progress-stat-item .val{font-family:var(--mono); font-size:28px; color:var(--sage); line-height:1;}
+  
+  .chart-box{background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:32px 28px; margin-bottom:32px;}
+  .chart-header{display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;}
+  .chart-header h3{font-size:18px; font-weight:480;}
+  .chart-header .sub{font-family:var(--mono); font-size:11px; color:var(--sage);}
+  .chart-canvas-wrap{position:relative; width:100%; height:240px;}
+  .chart-canvas-wrap canvas{width:100%; height:100%; display:block;}
+  .progress-empty{text-align:center; padding:52px 20px;}
+  .progress-empty p{color:var(--ink-soft); font-size:15px; max-width:440px; margin:0 auto 18px; line-height:1.6;}
+
+  .history-list{display:flex; flex-direction:column; gap:8px; margin-top:16px;}
+  .history-item{
+    background:var(--bg); border:1px solid var(--line); border-radius:2px; padding:16px 20px;
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+  }
+  .history-date{font-family:var(--mono); font-size:12px; color:var(--ink-soft);}
+  .history-metrics{font-family:var(--mono); font-size:13px; display:flex; gap:16px; flex-wrap:wrap;}
+  .history-metrics span{color:var(--ink);}
+  .history-metrics strong{color:var(--sage); font-weight:500;}
+  .history-severity{font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:2px; display:inline-block;}
+  .history-severity.good{background:rgba(74,107,90,.2); color:var(--sage);}
+  .history-severity.caution{background:rgba(184,147,95,.22); color:var(--amber);}
+  .history-severity.bad{background:rgba(168,83,74,.2); color:var(--brick);}
+
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
   }
 </style>
 </head>
 <body>
+
+<!-- Supabase Client & Auth Module (Isolated near top of body) -->
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://wbnvjyfiegjsogvopyhz.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_b_29-i9UjA3fpGV91NH3Ew_VIcfZKL7';
+
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  window.supabaseClient = supabase;
+
+  async function updateAuthUI(session) {
+    const user = session?.user;
+    window.currentUser = user || null;
+
+    const authBtn = document.getElementById('authBtn');
+    const userMenu = document.getElementById('userMenu');
+    const userEmail = document.getElementById('userEmail');
+    const progressNav = document.getElementById('progressNav');
+    const progressSection = document.getElementById('progress');
+
+    if (user) {
+      if (authBtn) authBtn.style.display = 'none';
+      if (userMenu) userMenu.style.display = 'inline-flex';
+      const displayName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'My Account';
+      if (userEmail) userEmail.textContent = displayName;
+      if (progressNav) progressNav.style.display = 'inline-block';
+      if (progressSection) progressSection.style.display = 'block';
+      if (typeof window.loadProgressData === 'function') {
+        window.loadProgressData();
+      }
+    } else {
+      if (authBtn) authBtn.style.display = 'inline-flex';
+      if (userMenu) userMenu.style.display = 'none';
+      if (progressNav) progressNav.style.display = 'none';
+      if (progressSection) progressSection.style.display = 'none';
+    }
+  }
+
+  window.signInWithGoogle = async function() {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) console.error('[Supabase Auth error]', error.message);
+    } catch (err) {
+      console.error('[Sign-in error]', err);
+    }
+  };
+
+  window.signOutUser = async function() {
+    try {
+      await supabase.auth.signOut();
+      await updateAuthUI(null);
+    } catch (err) {
+      console.error('[Sign-out error]', err);
+    }
+  };
+
+  // Check initial session
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    updateAuthUI(session);
+  });
+
+  // Listen for realtime auth changes
+  supabase.auth.onAuthStateChange((_event, session) => {
+    updateAuthUI(session);
+  });
+</script>
 
 <nav id="topNav">
   <div class="wrap">
@@ -302,8 +405,16 @@
       <a href="#how">How it works</a>
       <a href="#metrics">Metrics</a>
       <a href="#scan">Scan</a>
+      <a href="#progress" id="progressNav" style="display:none;">My Progress</a>
       <a href="#feedback">Feedback</a>
-      <a href="#" class="btn btn-ghost" style="padding:9px 18px; font-size:13px;">SpineSafe NGO</a>
+      <button class="btn btn-ghost" id="authBtn" onclick="window.signInWithGoogle()" style="padding:8px 14px; font-size:12.5px; border-radius:2px; display:inline-flex; align-items:center; gap:6px;">
+        <svg width="14" height="14" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+        Sign in with Google
+      </button>
+      <div id="userMenu" style="display:none; align-items:center; gap:10px;">
+        <span id="userEmail" style="font-family:var(--mono); font-size:12px; color:var(--sage); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+        <button class="btn btn-ghost" onclick="window.signOutUser()" style="padding:6px 12px; font-size:11.5px;">Sign out</button>
+      </div>
     </div>
   </div>
 </nav>
@@ -453,6 +564,60 @@
           <button class="btn btn-ghost" id="resetBtn">Reset</button>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     MY PROGRESS (Personal Scan History & Trend Tracking)
+═══════════════════════════════════════════════════════════════════ -->
+<section class="progress-section" id="progress">
+  <div class="wrap">
+    <div class="section-head reveal in">
+      <div class="eyebrow">Personal tracking</div>
+      <h2>My Progress</h2>
+      <p>Historical posture readings and clinical screening trend over time.</p>
+    </div>
+
+    <!-- Stat Row -->
+    <div class="progress-stats" id="progressStats">
+      <div class="progress-stat-item">
+        <span class="label">Best Neck Angle</span>
+        <div class="val" id="progBestScore">—</div>
+      </div>
+      <div class="progress-stat-item">
+        <span class="label">Active Streak</span>
+        <div class="val" id="progStreak">0 days</div>
+      </div>
+      <div class="progress-stat-item">
+        <span class="label">Total Scans</span>
+        <div class="val" id="progTotalScans">0</div>
+      </div>
+    </div>
+
+    <!-- Chart Container -->
+    <div class="chart-box">
+      <div class="chart-header">
+        <h3>Posture Trend (Neck Deviation Angle)</h3>
+        <span class="sub">Lower is better (0° = Neutral alignment)</span>
+      </div>
+      
+      <!-- Empty State for New Users -->
+      <div class="progress-empty" id="progressEmpty" style="display:none;">
+        <p>No scans recorded yet. Complete your first scan in the scanner above to start tracking your posture journey over time!</p>
+        <a href="#scan" class="btn btn-primary" style="padding:10px 20px; font-size:13px;">Start First Scan →</a>
+      </div>
+
+      <!-- Trend Line Canvas -->
+      <div class="chart-canvas-wrap" id="progressChartWrap">
+        <canvas id="progressCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Recent Scans List -->
+    <div id="progressListWrap" style="margin-top:28px;">
+      <h4 style="font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:14px;">Recent Scans</h4>
+      <div class="history-list" id="progressList"></div>
     </div>
   </div>
 </section>
@@ -1050,6 +1215,34 @@ async function runAIEvaluation(shoulderStability, headStability) {
       parsed,
       timestamp: new Date()
     };
+
+    // Non-blocking save to Supabase scans table if signed in
+    if (window.supabaseClient) {
+      (async () => {
+        try {
+          const { data: { session } } = await window.supabaseClient.auth.getSession();
+          if (session?.user?.id) {
+            const { error: insertError } = await window.supabaseClient.from('scans').insert({
+              user_id: session.user.id,
+              neck_deviation: metrics.neckDeviationAngle != null ? parseFloat(metrics.neckDeviationAngle.toFixed(2)) : null,
+              shoulder_tilt: metrics.shoulderTilt != null ? parseFloat(metrics.shoulderTilt.toFixed(2)) : null,
+              head_tilt: metrics.headTilt != null ? parseFloat(metrics.headTilt.toFixed(2)) : null,
+              shoulder_stability: parseFloat((shoulderStability / 100).toFixed(3)),
+              head_stability: parseFloat((headStability / 100).toFixed(3)),
+              severity: parsed.severity || 'Normal',
+              ai_result: parsed
+            });
+            if (insertError) {
+              console.warn('[Supabase scan insert error]', insertError.message);
+            } else if (typeof window.loadProgressData === 'function') {
+              window.loadProgressData();
+            }
+          }
+        } catch (saveErr) {
+          console.warn('[Supabase non-blocking save error]', saveErr);
+        }
+      })();
+    }
   } catch (err) {
     console.error('AI evaluation error:', err);
     aiLoading.classList.remove('active');
@@ -1116,6 +1309,243 @@ resetBtn.addEventListener('click', () => {
   aiResults.style.display = 'none';
   lastAIData = null;
 });
+
+/* ═══════════════════════════════════════════════════════════════════
+   MY PROGRESS — DATA FETCHING & VISUALIZATION
+═══════════════════════════════════════════════════════════════════ */
+const progBestScore     = document.getElementById('progBestScore');
+const progStreak        = document.getElementById('progStreak');
+const progTotalScans    = document.getElementById('progTotalScans');
+const progressEmpty     = document.getElementById('progressEmpty');
+const progressChartWrap = document.getElementById('progressChartWrap');
+const progressListWrap  = document.getElementById('progressListWrap');
+const progressList      = document.getElementById('progressList');
+
+window.loadProgressData = async function() {
+  if (!window.supabaseClient) return;
+  try {
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
+    if (!session?.user?.id) return;
+
+    const { data: scans, error } = await window.supabaseClient
+      .from('scans')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.warn('[Supabase loadProgressData error]', error);
+      return;
+    }
+
+    renderProgressView(scans || []);
+  } catch (err) {
+    console.warn('[loadProgressData error]', err);
+  }
+};
+
+function calculateStreak(scans) {
+  if (!scans || scans.length === 0) return 0;
+  const dates = Array.from(new Set(scans.map(s => {
+    const d = new Date(s.created_at);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }))).sort().reverse();
+
+  let streak = 0;
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const yesterday = new Date(Date.now() - 86400000);
+  const yestStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+  let checkDate = dates.includes(todayStr) ? new Date(today) : (dates.includes(yestStr) ? new Date(yesterday) : null);
+  if (!checkDate) return 0;
+
+  while (true) {
+    const currStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+    if (dates.includes(currStr)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+function renderProgressView(scans) {
+  setText(progTotalScans, String(scans.length));
+
+  if (scans.length === 0) {
+    setText(progBestScore, '—');
+    setText(progStreak, '0 days');
+    if (progressEmpty) progressEmpty.style.display = 'block';
+    if (progressChartWrap) progressChartWrap.style.display = 'none';
+    if (progressListWrap) progressListWrap.style.display = 'none';
+    return;
+  }
+
+  if (progressEmpty) progressEmpty.style.display = 'none';
+  if (progressChartWrap) progressChartWrap.style.display = 'block';
+  if (progressListWrap) progressListWrap.style.display = 'block';
+
+  // Best neck angle
+  const neckValues = scans.map(s => s.neck_deviation).filter(v => v != null);
+  if (neckValues.length > 0) {
+    setText(progBestScore, Math.min(...neckValues).toFixed(1) + '°');
+  } else {
+    const shoulderValues = scans.map(s => s.shoulder_tilt).filter(v => v != null);
+    setText(progBestScore, shoulderValues.length ? Math.min(...shoulderValues).toFixed(1) + '° tilt' : '—');
+  }
+
+  // Active streak
+  const streak = calculateStreak(scans);
+  setText(progStreak, `${streak} ${streak === 1 ? 'day' : 'days'}`);
+
+  // Render trend chart & scan list
+  renderTrendChart(scans);
+  renderScanList(scans);
+}
+
+function renderTrendChart(scans) {
+  const canvas = document.getElementById('progressCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const validScans = scans.filter(s => s.neck_deviation != null || s.shoulder_tilt != null);
+  if (validScans.length === 0) return;
+
+  const values = validScans.map(s => s.neck_deviation != null ? s.neck_deviation : s.shoulder_tilt);
+  const minVal = Math.max(0, Math.min(...values) - 2);
+  const maxVal = Math.max(25, Math.max(...values) + 3);
+
+  const padLeft = 42, padRight = 24, padTop = 22, padBottom = 34;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(225, 222, 212, 0.9)';
+  ctx.lineWidth = 1;
+  const gridSteps = 4;
+  for (let i = 0; i <= gridSteps; i++) {
+    const y = padTop + (plotH / gridSteps) * i;
+    const val = (maxVal - (maxVal - minVal) * (i / gridSteps)).toFixed(0);
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y);
+    ctx.lineTo(w - padRight, y);
+    ctx.stroke();
+
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#6B6A64';
+    ctx.textAlign = 'right';
+    ctx.fillText(val + '°', padLeft - 8, y + 3);
+  }
+
+  // Calculate points
+  const points = values.map((val, i) => {
+    const x = validScans.length === 1
+      ? padLeft + plotW / 2
+      : padLeft + (plotW / (validScans.length - 1)) * i;
+    const y = padTop + plotH - ((val - minVal) / (maxVal - minVal)) * plotH;
+    return { x, y, val, scan: validScans[i] };
+  });
+
+  // Single Sage Trend Line
+  ctx.strokeStyle = '#4A6B5A';
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  points.forEach((pt, i) => {
+    if (i === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  });
+  ctx.stroke();
+
+  // Subtle Area Gradient Under Curve
+  if (points.length > 1) {
+    const grad = ctx.createLinearGradient(0, padTop, 0, h - padBottom);
+    grad.addColorStop(0, 'rgba(74, 107, 90, 0.16)');
+    grad.addColorStop(1, 'rgba(74, 107, 90, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, h - padBottom);
+    points.forEach(pt => ctx.lineTo(pt.x, pt.y));
+    ctx.lineTo(points[points.length - 1].x, h - padBottom);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Draw Point Dots
+  points.forEach((pt) => {
+    ctx.fillStyle = '#8FA89A';
+    ctx.strokeStyle = '#4A6B5A';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    const d = new Date(pt.scan.created_at);
+    const label = `${d.getMonth() + 1}/${d.getDate()}`;
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#6B6A64';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, pt.x, h - 10);
+  });
+}
+
+function renderScanList(scans) {
+  if (!progressList) return;
+  progressList.innerHTML = '';
+
+  const recent = [...scans].reverse().slice(0, 8);
+  recent.forEach((s) => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+
+    const d = new Date(s.created_at);
+    const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' • ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+    let metricsStr = '';
+    if (s.neck_deviation != null) {
+      metricsStr += `<span>Neck: <strong>${s.neck_deviation.toFixed(1)}°</strong></span>`;
+    }
+    if (s.shoulder_tilt != null) {
+      metricsStr += `<span>Shoulder: <strong>${s.shoulder_tilt.toFixed(1)}°</strong></span>`;
+    }
+    if (s.head_stability != null) {
+      metricsStr += `<span>Stability: <strong>${s.head_stability.toFixed(2)} var</strong></span>`;
+    }
+
+    const sev = s.severity || 'Normal';
+    const sevClass = (sev === 'Normal' || sev === 'Very Mild') ? 'good' : (sev === 'Mild' || sev === 'Moderate') ? 'caution' : 'bad';
+
+    item.innerHTML = `
+      <div class="history-date">${dateStr}</div>
+      <div class="history-metrics">${metricsStr}</div>
+      <span class="history-severity ${sevClass}">${sev}</span>
+    `;
+    progressList.appendChild(item);
+  });
+}
+
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('resize', () => {
+    if (window.currentUser && typeof window.loadProgressData === 'function') {
+      window.loadProgressData();
+    }
+  });
+}
 </script>
 
 </body>
