@@ -11,6 +11,9 @@
 <!-- MediaPipe Pose (Main thread direct execution) -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
 
+<!-- Canvas Confetti (Phase C) -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
+
 <style>
   :root{
     --bg: #F6F4EE;
@@ -314,15 +317,39 @@
   .history-severity{font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:2px; display:inline-block;}
   .history-severity.good{background:rgba(74,107,90,.2); color:var(--sage);}
   .history-severity.caution{background:rgba(184,147,95,.22); color:var(--amber);}
-  .history-severity.bad{background:rgba(168,83,74,.2); color:var(--brick);}
-
-  /* ---------- SHARE MODAL & PUBLIC RESULT VIEW ---------- */
-  .share-modal{display:none; position:fixed; inset:0; background:rgba(28,29,27,0.72); z-index:200; align-items:center; justify-content:center; padding:20px;}
-  .share-modal.show{display:flex;}
-  .share-modal-card{background:var(--surface); border:1px solid var(--line); border-radius:6px; max-width:640px; width:100%; padding:28px; box-shadow:0 12px 40px rgba(0,0,0,0.2); position:relative;}
+  /* ---------- REVEAL SHARE MODAL & PUBLIC RESULT VIEW ---------- */
+  .share-modal{
+    display:none; position:fixed; inset:0; background:rgba(28,29,27,0.78); z-index:200;
+    align-items:center; justify-content:center; padding:20px;
+    opacity:0; transition:opacity 0.25s cubic-bezier(.22,.61,.36,1);
+    backdrop-filter:blur(4px);
+  }
+  .share-modal.show{display:flex; opacity:1;}
+  .share-modal-card{
+    background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    max-width:680px; width:100%; padding:28px 28px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.25);
+    position:relative; transform:scale(0.92); opacity:0;
+    transition:transform 0.28s cubic-bezier(.22,.61,.36,1), opacity 0.25s ease;
+  }
+  .share-modal.show .share-modal-card{transform:scale(1); opacity:1;}
+  .share-preview-wrap{
+    background:var(--bg); border:1px solid var(--line); border-radius:6px;
+    overflow:hidden; margin:16px 0 20px; text-align:center; padding:10px;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .share-preview-wrap canvas{
+    max-width:100%; height:auto; display:block; margin:0 auto; border-radius:4px;
+    box-shadow:0 4px 16px rgba(0,0,0,0.08);
+  }
+  .share-actions-row{
+    display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center;
+    opacity:0; transform:translateY(6px); transition:opacity 0.3s ease, transform 0.3s ease;
+  }
+  .share-actions-row.revealed{opacity:1; transform:translateY(0);}
 
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
+    .share-modal, .share-modal-card, .share-actions-row{transition:none !important; opacity:1 !important; transform:none !important;}
   }
 </style>
 </head>
@@ -1736,234 +1763,328 @@ function getScoreSeverity(score) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   CANVAS CARD RENDERING (Phase C)
+   CANVAS CARD RENDERING (Phase A & B: High-Res 1080px & Rich Design)
 ═══════════════════════════════════════════════════════════════════ */
-function renderResultCard(canvas, data) {
+function renderResultCard(canvas, data, options = {}) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const W = 800;
-  const H = 480;
+  const W = 1080;
+  const H = 608;
   canvas.width = W;
   canvas.height = H;
 
-  // Background
+  // 1. Base Cream Fill
   ctx.fillStyle = '#F6F4EE';
   ctx.fillRect(0, 0, W, H);
 
-  // Outer Border
+  // 2. Faint Millimeter Clinical Grid Pattern (Chart Paper Texture)
+  ctx.save();
+  ctx.lineWidth = 1;
+  // Minor grid (24px)
+  ctx.strokeStyle = 'rgba(225, 222, 212, 0.45)';
+  ctx.beginPath();
+  for (let x = 24; x < W; x += 24) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+  }
+  for (let y = 24; y < H; y += 24) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+
+  // Major grid (72px)
+  ctx.strokeStyle = 'rgba(225, 222, 212, 0.85)';
+  ctx.beginPath();
+  for (let x = 72; x < W; x += 72) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, H);
+  }
+  for (let y = 72; y < H; y += 72) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // 3. Card Outer Frame (Border with rounded corners)
   ctx.strokeStyle = '#E1DED4';
   ctx.lineWidth = 2;
   if (ctx.roundRect) {
     ctx.beginPath();
-    ctx.roundRect(12, 12, W - 24, H - 24, 16);
+    ctx.roundRect(16, 16, W - 32, H - 32, 16);
     ctx.stroke();
   } else {
-    ctx.strokeRect(12, 12, W - 24, H - 24);
+    ctx.strokeRect(16, 16, W - 32, H - 32);
   }
 
-  // Header Logo & Branding
-  ctx.fillStyle = '#4A6B5A';
-  ctx.beginPath();
-  ctx.arc(44, 46, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#8FA89A';
-  ctx.beginPath();
-  ctx.arc(58, 46, 5, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.font = '600 20px Inter, sans-serif';
-  ctx.fillStyle = '#1C1D1B';
-  ctx.textAlign = 'left';
-  ctx.fillText('media', 72, 53);
-  ctx.font = '600 20px Inter, sans-serif';
-  ctx.fillStyle = '#4A6B5A';
-  ctx.fillText('spine', 124, 53);
-
-  ctx.font = '500 11px "IBM Plex Mono", monospace';
-  ctx.fillStyle = '#6B6A64';
-  ctx.textAlign = 'right';
-  ctx.fillText('CLINICAL AI POSTURE SCREENING', W - 40, 52);
-
-  // Divider Line
-  ctx.strokeStyle = '#E1DED4';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(36, 76);
-  ctx.lineTo(W - 36, 76);
-  ctx.stroke();
-
-  const score = Math.max(0, Math.min(100, Math.round(data.score ?? 85)));
-  const sevInfo = getScoreSeverity(score);
+  const finalScore = Math.max(0, Math.min(100, Math.round(data.score ?? 85)));
+  const displayScore = (options.animatedScore !== undefined) ? options.animatedScore : finalScore;
+  const sevInfo = getScoreSeverity(finalScore);
   const severityLabel = data.severity || sevInfo.label;
   const isProgress = data.variant === 'progress';
 
+  // 4. Colored Severity Corner Flourishes / Accent Brackets
+  ctx.strokeStyle = sevInfo.color;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  const cLen = 36;
+  const cPad = 16;
+
+  ctx.beginPath();
+  // Top-left
+  ctx.moveTo(cPad, cPad + cLen);
+  ctx.lineTo(cPad, cPad);
+  ctx.lineTo(cPad + cLen, cPad);
+  // Top-right
+  ctx.moveTo(W - cPad - cLen, cPad);
+  ctx.lineTo(W - cPad, cPad);
+  ctx.lineTo(W - cPad, cPad + cLen);
+  // Bottom-left
+  ctx.moveTo(cPad, H - cPad - cLen);
+  ctx.lineTo(cPad, H - cPad);
+  ctx.lineTo(cPad + cLen, H - cPad);
+  // Bottom-right
+  ctx.moveTo(W - cPad - cLen, H - cPad);
+  ctx.lineTo(W - cPad, H - cPad);
+  ctx.lineTo(W - cPad, H - cPad - cLen);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  // 5. Header Logo & Brand Placement
+  ctx.fillStyle = sevInfo.color;
+  ctx.beginPath();
+  ctx.arc(58, 62, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8FA89A';
+  ctx.beginPath();
+  ctx.arc(76, 62, 6.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font = '700 24px Inter, sans-serif';
+  ctx.fillStyle = '#1C1D1B';
+  ctx.textAlign = 'left';
+  ctx.fillText('media', 94, 70);
+  ctx.fillStyle = '#4A6B5A';
+  ctx.fillText('spine', 160, 70);
+
+  ctx.font = '600 12px "IBM Plex Mono", monospace';
+  ctx.fillStyle = '#6B6A64';
+  ctx.textAlign = 'right';
+  ctx.fillText('CLINICAL AI POSTURE SCREENING • SPINESAFE NGO', W - 52, 68);
+
+  // Divider Line
+  ctx.strokeStyle = '#E1DED4';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(48, 96);
+  ctx.lineTo(W - 48, 96);
+  ctx.stroke();
+
+  // 6. Main Card Body
   if (!isProgress) {
     // Single Scan Card
-    ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
     ctx.fillStyle = '#6B6A64';
     ctx.textAlign = 'left';
-    ctx.fillText('OVERALL POSTURE SCORE', 44, 114);
+    ctx.fillText('OVERALL POSTURE SCORE', 56, 142);
 
-    ctx.font = '480 84px Fraunces, serif';
+    // Dominant Serif Score
+    ctx.font = '480 114px Fraunces, serif';
     ctx.fillStyle = '#1C1D1B';
-    ctx.fillText(String(score), 42, 195);
+    ctx.fillText(String(displayScore), 54, 252);
 
-    const scoreWidth = ctx.measureText(String(score)).width;
-    ctx.font = '400 28px Fraunces, serif';
+    const scoreWidth = ctx.measureText(String(displayScore)).width;
+    ctx.font = '400 36px Fraunces, serif';
     ctx.fillStyle = '#6B6A64';
-    ctx.fillText('/ 100', 44 + scoreWidth + 8, 172);
+    ctx.fillText('/ 100', 58 + scoreWidth + 10, 222);
 
-    // Severity Badge Pill
-    const badgeX = 44 + scoreWidth + 105;
-    const badgeY = 142;
-    const badgeW = 126;
-    const badgeH = 34;
+    // Severity Pill Badge (Shown after count-up or fullReveal)
+    if (options.showBadge !== false) {
+      const badgeX = 58 + scoreWidth + 140;
+      const badgeY = 184;
+      const badgeW = 164;
+      const badgeH = 44;
 
-    ctx.fillStyle = sevInfo.bg;
-    if (ctx.roundRect) {
-      ctx.beginPath();
-      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 17);
-      ctx.fill();
-    } else {
-      ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
-    }
-    ctx.fillStyle = sevInfo.color;
-    ctx.font = '600 13px "IBM Plex Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('● ' + severityLabel, badgeX + badgeW / 2, badgeY + 22);
-
-    // 3 Metric breakdown cards
-    const m = data.metrics || {};
-    const metricBoxes = [
-      { label: 'NECK DEVIATION', val: m.neck_deviation != null ? `${Number(m.neck_deviation).toFixed(1)}°` : '—' },
-      { label: 'SHOULDER TILT', val: m.shoulder_tilt != null ? `${Number(m.shoulder_tilt).toFixed(1)}°` : '—' },
-      { label: 'HEAD STABILITY', val: m.head_stability != null ? `${Number(m.head_stability).toFixed(2)} var` : 'Steady' }
-    ];
-
-    const boxW = 224;
-    const boxH = 82;
-    const gap = 20;
-    const startX = 44;
-    const boxY = 240;
-
-    metricBoxes.forEach((bx, idx) => {
-      const bxX = startX + idx * (boxW + gap);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.strokeStyle = '#E1DED4';
-      ctx.lineWidth = 1;
+      ctx.fillStyle = sevInfo.bg;
+      ctx.strokeStyle = sevInfo.color;
+      ctx.lineWidth = 1.5;
       if (ctx.roundRect) {
         ctx.beginPath();
-        ctx.roundRect(bxX, boxY, boxW, boxH, 4);
+        ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 22);
         ctx.fill();
         ctx.stroke();
       } else {
-        ctx.fillRect(bxX, boxY, boxW, boxH);
-        ctx.strokeRect(bxX, boxY, boxW, boxH);
+        ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+        ctx.strokeRect(badgeX, badgeY, badgeW, badgeH);
       }
-
-      ctx.fillStyle = '#6B6A64';
-      ctx.font = '500 10px "IBM Plex Mono", monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(bx.label, bxX + 16, boxY + 28);
-
-      ctx.fillStyle = '#4A6B5A';
-      ctx.font = '600 22px "IBM Plex Mono", monospace';
-      ctx.fillText(bx.val, bxX + 16, boxY + 62);
-    });
-  } else {
-    // Progress Card
-    ctx.font = '500 11px "IBM Plex Mono", monospace';
-    ctx.fillStyle = '#6B6A64';
-    ctx.textAlign = 'left';
-    ctx.fillText('POSTURE TRACKING MILESTONE', 44, 114);
-
-    ctx.font = '480 72px Fraunces, serif';
-    ctx.fillStyle = '#1C1D1B';
-    ctx.fillText(String(score), 42, 185);
-
-    const scoreWidth = ctx.measureText(String(score)).width;
-    ctx.font = '400 24px Fraunces, serif';
-    ctx.fillStyle = '#6B6A64';
-    ctx.fillText('/ 100 score', 44 + scoreWidth + 8, 165);
-
-    const milestone = data.milestone || 'Consistent posture tracking over time';
-    ctx.font = '500 15px Inter, sans-serif';
-    ctx.fillStyle = '#4A6B5A';
-    ctx.textAlign = 'left';
-    ctx.fillText('✦ ' + milestone, 44, 230);
-
-    // Sparkline Trend Box
-    const sparkW = 712;
-    const sparkH = 90;
-    const sparkX = 44;
-    const sparkY = 255;
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.strokeStyle = '#E1DED4';
-    ctx.lineWidth = 1;
-    if (ctx.roundRect) {
-      ctx.beginPath();
-      ctx.roundRect(sparkX, sparkY, sparkW, sparkH, 4);
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      ctx.fillRect(sparkX, sparkY, sparkW, sparkH);
-      ctx.strokeRect(sparkX, sparkY, sparkW, sparkH);
+      ctx.fillStyle = sevInfo.color;
+      ctx.font = '600 14px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('● ' + severityLabel.toUpperCase(), badgeX + badgeW / 2, badgeY + 28);
     }
 
-    const trend = Array.isArray(data.trend) && data.trend.length ? data.trend : [score, score];
-    const tMin = Math.min(...trend) - 2;
-    const tMax = Math.max(...trend) + 2;
-    const sPadX = 30;
-    const sPlotW = sparkW - sPadX * 2;
-    const sPlotH = sparkH - 36;
+    // 3 Metric Breakdown Cards (Shown after count-up or fullReveal)
+    if (options.showMetrics !== false) {
+      const m = data.metrics || {};
+      const metricBoxes = [
+        { label: 'NECK DEVIATION', val: m.neck_deviation != null ? `${Number(m.neck_deviation).toFixed(1)}°` : '—', target: 'Normal: 0–5°' },
+        { label: 'SHOULDER TILT', val: m.shoulder_tilt != null ? `${Number(m.shoulder_tilt).toFixed(1)}°` : '—', target: 'Normal: 0–2°' },
+        { label: 'HEAD STABILITY', val: m.head_stability != null ? `${Number(m.head_stability).toFixed(2)} var` : 'Steady', target: 'Steady: <0.03' }
+      ];
 
-    ctx.strokeStyle = '#4A6B5A';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    trend.forEach((val, i) => {
-      const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
-      const py = sparkY + sparkH - 18 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    });
-    ctx.stroke();
+      const boxW = 304;
+      const boxH = 108;
+      const gap = 28;
+      const startX = 56;
+      const boxY = 312;
 
-    trend.forEach((val, i) => {
-      const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
-      const py = sparkY + sparkH - 18 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
-      ctx.fillStyle = '#8FA89A';
+      metricBoxes.forEach((bx, idx) => {
+        const bxX = startX + idx * (boxW + gap);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.strokeStyle = '#E1DED4';
+        ctx.lineWidth = 1.5;
+        if (ctx.roundRect) {
+          ctx.beginPath();
+          ctx.roundRect(bxX, boxY, boxW, boxH, 6);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillRect(bxX, boxY, boxW, boxH);
+          ctx.strokeRect(bxX, boxY, boxW, boxH);
+        }
+
+        ctx.fillStyle = '#6B6A64';
+        ctx.font = '600 11px "IBM Plex Mono", monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(bx.label, bxX + 20, boxY + 32);
+
+        ctx.fillStyle = '#4A6B5A';
+        ctx.font = '600 28px "IBM Plex Mono", monospace';
+        ctx.fillText(bx.val, bxX + 20, boxY + 70);
+
+        ctx.fillStyle = '#8FA89A';
+        ctx.font = '500 11px Inter, sans-serif';
+        ctx.fillText(bx.target, bxX + 20, boxY + 92);
+      });
+    }
+  } else {
+    // Progress Card
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#6B6A64';
+    ctx.textAlign = 'left';
+    ctx.fillText('POSTURE TRACKING MILESTONE', 56, 142);
+
+    ctx.font = '480 96px Fraunces, serif';
+    ctx.fillStyle = '#1C1D1B';
+    ctx.fillText(String(displayScore), 54, 240);
+
+    const scoreWidth = ctx.measureText(String(displayScore)).width;
+    ctx.font = '400 30px Fraunces, serif';
+    ctx.fillStyle = '#6B6A64';
+    ctx.fillText('/ 100 avg score', 58 + scoreWidth + 10, 214);
+
+    const milestone = data.milestone || 'Consistent posture tracking over time';
+    ctx.font = '600 16px Inter, sans-serif';
+    ctx.fillStyle = '#4A6B5A';
+    ctx.textAlign = 'left';
+    ctx.fillText('✦ ' + milestone, 56, 290);
+
+    if (options.showMetrics !== false) {
+      // Sparkline Box
+      const sparkW = 968;
+      const sparkH = 120;
+      const sparkX = 56;
+      const sparkY = 320;
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#E1DED4';
+      ctx.lineWidth = 1.5;
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(sparkX, sparkY, sparkW, sparkH, 6);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(sparkX, sparkY, sparkW, sparkH);
+        ctx.strokeRect(sparkX, sparkY, sparkW, sparkH);
+      }
+
+      const trend = Array.isArray(data.trend) && data.trend.length ? data.trend : [displayScore, displayScore];
+      const tMin = Math.min(...trend) - 2;
+      const tMax = Math.max(...trend) + 2;
+      const sPadX = 36;
+      const sPlotW = sparkW - sPadX * 2;
+      const sPlotH = sparkH - 44;
+
+      // Area fill
+      const grad = ctx.createLinearGradient(0, sparkY + 20, 0, sparkY + sparkH);
+      grad.addColorStop(0, 'rgba(74, 107, 90, 0.16)');
+      grad.addColorStop(1, 'rgba(74, 107, 90, 0.0)');
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.moveTo(sparkX + sPadX, sparkY + sparkH - 20);
+      trend.forEach((val, i) => {
+        const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+        const py = sparkY + sparkH - 22 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+        ctx.lineTo(px, py);
+      });
+      ctx.lineTo(sparkX + sPadX + sPlotW, sparkY + sparkH - 20);
+      ctx.closePath();
       ctx.fill();
-    });
+
+      // Line
+      ctx.strokeStyle = '#4A6B5A';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      trend.forEach((val, i) => {
+        const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+        const py = sparkY + sparkH - 22 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+
+      // Dots
+      trend.forEach((val, i) => {
+        const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+        const py = sparkY + sparkH - 22 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.strokeStyle = '#4A6B5A';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(px, py, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
   }
 
-  // Footer
+  // 7. Footer
   ctx.strokeStyle = '#E1DED4';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(36, H - 74);
-  ctx.lineTo(W - 36, H - 74);
+  ctx.moveTo(48, H - 90);
+  ctx.lineTo(W - 48, H - 90);
   ctx.stroke();
 
   const d = data.timestamp ? new Date(data.timestamp) : new Date();
   const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-  ctx.font = '400 11px "IBM Plex Mono", monospace';
+  ctx.font = '500 12px "IBM Plex Mono", monospace';
   ctx.fillStyle = '#6B6A64';
   ctx.textAlign = 'left';
-  ctx.fillText(`Scanned: ${dateStr} • On-device CV • SpineSafe NGO`, 44, H - 36);
+  ctx.fillText(`Verified On-Device Screening • SpineSafe NGO Platform • ${dateStr}`, 56, H - 44);
 
   const displayUrl = data.shareUrl || 'mediaspi.vercel.app';
-  ctx.font = '500 11px "IBM Plex Mono", monospace';
+  ctx.font = '600 13px "IBM Plex Mono", monospace';
   ctx.fillStyle = '#4A6B5A';
   ctx.textAlign = 'right';
-  ctx.fillText(displayUrl.replace(/^https?:\/\//, ''), W - 44, H - 36);
+  ctx.fillText(displayUrl.replace(/^https?:\/\//, ''), W - 56, H - 44);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   SHARE UI & PUBLIC ROUTE HANDLING (Phase D)
+   SHARE UI, REVEAL MODAL & PUBLIC ROUTE (Phase C & D)
 ═══════════════════════════════════════════════════════════════════ */
 const shareResultBtn   = document.getElementById('shareResultBtn');
 const shareProgressBtn = document.getElementById('shareProgressBtn');
@@ -1972,9 +2093,14 @@ const closeShareModal  = document.getElementById('closeShareModal');
 const shareCardPreview = document.getElementById('shareCardPreview');
 const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
 const downloadCardBtn  = document.getElementById('downloadCardBtn');
+const nativeShareBtn   = document.getElementById('nativeShareBtn');
+const shareActionsRow  = document.getElementById('shareActionsRow');
 
 let currentSharePayload = null;
 let currentShareUrl     = '';
+let cachedCardBlob      = null;
+let cachedCardDataUrl   = '';
+let revealAnimFrame     = null;
 
 function generateShareId() {
   return 's_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).substring(4);
@@ -1982,12 +2108,10 @@ function generateShareId() {
 
 async function persistSharePayload(payload) {
   const shareId = payload.id;
-  // Store locally for zero-latency retrieval
   try {
     localStorage.setItem('mediaspine_share_' + shareId, JSON.stringify(payload));
   } catch (e) {}
 
-  // Save to Supabase shared_results if available (purely anonymous, no user_id/email)
   if (window.supabaseClient) {
     try {
       await window.supabaseClient.from('shared_results').insert({
@@ -2006,42 +2130,89 @@ async function persistSharePayload(payload) {
   }
 }
 
-async function handleShareAction(payload) {
-  await persistSharePayload(payload);
+function openRevealModal(payload) {
+  if (revealAnimFrame) {
+    cancelAnimationFrame(revealAnimFrame);
+    revealAnimFrame = null;
+  }
+
   currentSharePayload = payload;
   currentShareUrl = `${window.location.origin}/#/r/${payload.id}`;
+  persistSharePayload(payload);
 
-  const offCanvas = document.createElement('canvas');
-  renderResultCard(offCanvas, {
-    ...payload,
-    shareUrl: currentShareUrl
-  });
+  if (shareModal) shareModal.classList.add('show');
+  if (shareActionsRow) shareActionsRow.classList.remove('revealed');
 
-  // Mobile Web Share API with image file if supported
-  offCanvas.toBlob(async (blob) => {
-    if (blob && navigator.canShare) {
-      const file = new File([blob], `MediaSpine_Posture_Score_${payload.score}.png`, { type: 'image/png' });
-      if (navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            title: 'My MediaSpine Posture Score',
-            text: `My posture score is ${payload.score}/100 (${payload.severity}) on MediaSpine! Check it out: ${currentShareUrl}`,
-            files: [file]
-          });
-          return;
-        } catch (shareErr) {
-          if (shareErr.name === 'AbortError') return;
-        }
-      }
+  const targetScore = Math.max(0, Math.min(100, Math.round(payload.score ?? 85)));
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Single PNG generation helper
+  const finalizePNG = () => {
+    if (shareCardPreview && shareCardPreview.toBlob) {
+      shareCardPreview.toBlob((blob) => {
+        cachedCardBlob = blob;
+        cachedCardDataUrl = shareCardPreview.toDataURL('image/png');
+      }, 'image/png');
     }
+  };
 
-    // Modal fallback for desktop & direct downloads
+  if (prefersReducedMotion) {
+    // Instant reveal path
     renderResultCard(shareCardPreview, {
       ...payload,
       shareUrl: currentShareUrl
-    });
-    if (shareModal) shareModal.classList.add('show');
-  }, 'image/png');
+    }, { animatedScore: targetScore, showBadge: true, showMetrics: true });
+
+    if (shareActionsRow) shareActionsRow.classList.add('revealed');
+    finalizePNG();
+  } else {
+    // Sequenced Reveal Animation
+    const duration = 900;
+    const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+    function step(now) {
+      const elapsed = Math.min(duration, now - startTime);
+      // Ease out cubic
+      const progress = 1 - Math.pow(1 - elapsed / duration, 3);
+      const currentScore = Math.round(progress * targetScore);
+      const isDone = elapsed >= duration;
+
+      renderResultCard(shareCardPreview, {
+        ...payload,
+        shareUrl: currentShareUrl
+      }, {
+        animatedScore: currentScore,
+        showBadge: isDone,
+        showMetrics: isDone
+      });
+
+      if (!isDone) {
+        revealAnimFrame = requestAnimationFrame(step);
+      } else {
+        revealAnimFrame = null;
+        finalizePNG();
+
+        // Trigger confetti ONLY if severity is Normal (or score >= 88)
+        if (payload.severity === 'Normal' || targetScore >= 88) {
+          if (typeof confetti === 'function') {
+            confetti({
+              particleCount: 45,
+              spread: 60,
+              origin: { y: 0.65 },
+              colors: ['#4A6B5A', '#8FA89A', '#B8935F', '#E7ECE4']
+            });
+          }
+        }
+
+        // Stagger reveal action buttons
+        setTimeout(() => {
+          if (shareActionsRow) shareActionsRow.classList.add('revealed');
+        }, 150);
+      }
+    }
+
+    revealAnimFrame = requestAnimationFrame(step);
+  }
 }
 
 // Single Scan Share
@@ -2068,7 +2239,7 @@ if (shareResultBtn) {
       timestamp: timestamp ? timestamp.toISOString() : new Date().toISOString()
     };
 
-    handleShareAction(payload);
+    openRevealModal(payload);
   });
 }
 
@@ -2099,7 +2270,6 @@ if (shareProgressBtn) {
     const sev = getScoreSeverity(avgScore).label;
     const id = generateShareId();
 
-    // Compute milestone difference
     let milestone = `Tracked ${scans.length} scans on MediaSpine`;
     if (scans.length >= 2) {
       const firstNeck = scans[0].neck_deviation;
@@ -2124,46 +2294,85 @@ if (shareProgressBtn) {
       timestamp: new Date().toISOString()
     };
 
-    handleShareAction(payload);
+    openRevealModal(payload);
   });
 }
 
-// Share Modal Actions
-if (closeShareModal) {
-  closeShareModal.addEventListener('click', () => {
-    if (shareModal) shareModal.classList.remove('show');
+// Native Share action
+if (nativeShareBtn) {
+  nativeShareBtn.addEventListener('click', async () => {
+    if (!currentSharePayload) return;
+    const score = currentSharePayload.score;
+    const sev = currentSharePayload.severity;
+
+    if (cachedCardBlob && navigator.canShare) {
+      const file = new File([cachedCardBlob], `MediaSpine_Posture_Score_${score}.png`, { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: 'My MediaSpine Posture Score',
+            text: `My posture score is ${score}/100 (${sev}) on MediaSpine! Check it out: ${currentShareUrl}`,
+            files: [file]
+          });
+          return;
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+        }
+      }
+    }
+
+    // Fallback: Copy link
+    try {
+      await navigator.clipboard.writeText(currentShareUrl);
+      if (typeof window.showAuthToast === 'function') {
+        window.showAuthToast('Share link copied to clipboard! ✓', false);
+      }
+    } catch (e) {}
   });
 }
 
-if (shareModal) {
-  shareModal.addEventListener('click', (e) => {
-    if (e.target === shareModal) shareModal.classList.remove('show');
-  });
-}
-
+// Download action
 if (downloadCardBtn) {
   downloadCardBtn.addEventListener('click', () => {
     if (!shareCardPreview) return;
     const link = document.createElement('a');
-    link.download = `MediaSpine_Score_${currentSharePayload?.score || 85}.png`;
-    link.href = shareCardPreview.toDataURL('image/png');
+    link.download = `MediaSpine_Posture_Score_${currentSharePayload?.score || 85}.png`;
+    link.href = cachedCardDataUrl || shareCardPreview.toDataURL('image/png');
     link.click();
   });
 }
 
+// Copy link action
 if (copyShareLinkBtn) {
   copyShareLinkBtn.addEventListener('click', async () => {
     if (!currentShareUrl) return;
     try {
       await navigator.clipboard.writeText(currentShareUrl);
-      const originalText = copyShareLinkBtn.textContent;
-      copyShareLinkBtn.textContent = 'Copied to clipboard! ✓';
-      setTimeout(() => { copyShareLinkBtn.textContent = originalText; }, 2500);
+      const span = copyShareLinkBtn.querySelector('.btn-label') || copyShareLinkBtn;
+      const originalText = span.textContent;
+      span.textContent = 'Copied! ✓';
+      setTimeout(() => { span.textContent = originalText; }, 2500);
     } catch (e) {
       if (typeof window.showAuthToast === 'function') {
         window.showAuthToast('Share URL: ' + currentShareUrl, false);
       }
     }
+  });
+}
+
+// Close Modal
+function closeRevealModal() {
+  if (revealAnimFrame) {
+    cancelAnimationFrame(revealAnimFrame);
+    revealAnimFrame = null;
+  }
+  if (shareModal) shareModal.classList.remove('show');
+}
+
+if (closeShareModal) closeShareModal.addEventListener('click', closeRevealModal);
+if (shareModal) {
+  shareModal.addEventListener('click', (e) => {
+    if (e.target === shareModal) closeRevealModal();
   });
 }
 
@@ -2260,20 +2469,37 @@ if (typeof window !== 'undefined') {
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════
-     SHARE RESULT MODAL
+     SHARE RESULT REVEAL MODAL (Phase B & C)
 ═══════════════════════════════════════════════════════════════════ -->
 <div class="share-modal" id="shareModal">
   <div class="share-modal-card">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-      <h3 style="font-family:var(--display); font-size:20px; font-weight:480;">Share Posture Score Card</h3>
-      <button id="closeShareModal" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--ink-soft); padding:4px 8px; line-height:1;">×</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div>
+        <div class="eyebrow" style="font-size:11px; margin-bottom:2px;">Verified on-device screening</div>
+        <h3 style="font-family:var(--display); font-size:22px; font-weight:480; color:var(--ink);">Posture Assessment Card</h3>
+      </div>
+      <button id="closeShareModal" aria-label="Close" style="background:none; border:none; cursor:pointer; color:var(--ink-soft); padding:6px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-    <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; overflow:hidden; margin-bottom:20px; text-align:center; padding:12px;">
-      <canvas id="shareCardPreview" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
+
+    <div class="share-preview-wrap">
+      <canvas id="shareCardPreview"></canvas>
     </div>
-    <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
-      <button class="btn btn-ghost" id="copyShareLinkBtn" style="padding:10px 18px; font-size:13px;">Copy public link</button>
-      <button class="btn btn-primary" id="downloadCardBtn" style="padding:10px 20px; font-size:13px;">Download image (.png)</button>
+
+    <div class="share-actions-row" id="shareActionsRow">
+      <button class="btn btn-ghost" id="nativeShareBtn" style="padding:10px 16px; font-size:13px; display:inline-flex; align-items:center; gap:7px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <span class="btn-label">Share card</span>
+      </button>
+      <button class="btn btn-ghost" id="copyShareLinkBtn" style="padding:10px 16px; font-size:13px; display:inline-flex; align-items:center; gap:7px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span class="btn-label">Copy link</span>
+      </button>
+      <button class="btn btn-primary" id="downloadCardBtn" style="padding:10px 20px; font-size:13px; display:inline-flex; align-items:center; gap:7px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="btn-label">Download image (.png)</span>
+      </button>
     </div>
   </div>
 </div>
