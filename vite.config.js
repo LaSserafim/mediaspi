@@ -5,6 +5,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
+    server: {
+      port: 5173
+    },
     plugins: [
       {
         name: 'vercel-api-dev-server',
