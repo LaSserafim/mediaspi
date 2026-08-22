@@ -29,7 +29,12 @@ global.document = {
   getElementById: (id) => ({ id, textContent: '', getContext: () => ({ clearRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, arc(){}, fill(){} }), classList: { add(){}, remove(){} }, style: {}, addEventListener(){} }),
   body: { classList: { add(){}, remove(){} } }
 };
-global.window = { addEventListener() {}, removeEventListener() {} };
+global.window = {
+  location: { hash: '', origin: 'http://localhost:5173', pathname: '/', search: '' },
+  scrollTo() {},
+  addEventListener() {},
+  removeEventListener() {}
+};
 global.IntersectionObserver = class { observe(){} };
 global.localStorage = { getItem: () => null, setItem: () => {} };
 global.performance = { now: () => Date.now() };

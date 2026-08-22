@@ -316,6 +316,11 @@
   .history-severity.caution{background:rgba(184,147,95,.22); color:var(--amber);}
   .history-severity.bad{background:rgba(168,83,74,.2); color:var(--brick);}
 
+  /* ---------- SHARE MODAL & PUBLIC RESULT VIEW ---------- */
+  .share-modal{display:none; position:fixed; inset:0; background:rgba(28,29,27,0.72); z-index:200; align-items:center; justify-content:center; padding:20px;}
+  .share-modal.show{display:flex;}
+  .share-modal-card{background:var(--surface); border:1px solid var(--line); border-radius:6px; max-width:640px; width:100%; padding:28px; box-shadow:0 12px 40px rgba(0,0,0,0.2); position:relative;}
+
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
   }
@@ -635,6 +640,7 @@
           <div class="report-cell recs"><h4>Recommendations</h4><ol id="aiRecs"></ol></div>
         </div>
         <div class="report-actions">
+          <button class="btn btn-primary" id="shareResultBtn" style="padding:12px 22px;">Share score card ↗</button>
           <button class="btn btn-ghost" id="csvBtn">Download report (.csv)</button>
           <button class="btn btn-ghost" id="resetBtn">Reset</button>
         </div>
@@ -673,8 +679,11 @@
     <!-- Chart Container -->
     <div class="chart-box">
       <div class="chart-header">
-        <h3>Posture Trend (Neck Deviation Angle)</h3>
-        <span class="sub">Lower is better (0° = Neutral alignment)</span>
+        <div>
+          <h3>Posture Trend (Neck Deviation Angle)</h3>
+          <span class="sub">Lower is better (0° = Neutral alignment)</span>
+        </div>
+        <button class="btn btn-ghost" id="shareProgressBtn" style="padding:8px 16px; font-size:12.5px; display:inline-flex; align-items:center; gap:6px;">Share progress card ↗</button>
       </div>
       
       <!-- Empty State for New Users -->
@@ -746,6 +755,40 @@
           <p>We read every message.</p>
         </div>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     PUBLIC SHARED RESULT VIEW (Route: #/r/<id>)
+═══════════════════════════════════════════════════════════════════ -->
+<section id="sharedResultView" style="display:none; min-height:80vh; padding:60px 0; background:var(--bg);">
+  <div class="wrap" style="max-width:760px;">
+    <!-- Active Result View -->
+    <div id="sharedCardContent">
+      <div style="text-align:center; margin-bottom:32px;">
+        <div class="eyebrow" style="justify-content:center;">MediaSpine Verified Posture Result</div>
+        <h1 style="font-size:32px; margin-bottom:8px;">Posture Assessment Card</h1>
+        <p style="color:var(--ink-soft); font-size:14.5px;">Verified on-device clinical screening result from MediaSpine.</p>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:24px; box-shadow:0 8px 30px rgba(0,0,0,0.06); margin-bottom:32px;">
+        <canvas id="sharedPublicCanvas" style="max-width:100%; height:auto; display:block; margin:0 auto; border-radius:4px;"></canvas>
+      </div>
+
+      <div style="text-align:center; background:var(--sage-pale); border:1px solid var(--sage-light); border-radius:4px; padding:32px 24px;">
+        <h3 style="font-family:var(--display); font-size:22px; margin-bottom:8px; color:var(--ink);">Want to measure your own posture?</h3>
+        <p style="color:var(--ink-soft); font-size:14.5px; max-width:480px; margin:0 auto 20px;">Use your webcam to track forward head tilt, shoulder symmetry, and stability in 60 seconds. 100% private, on-device screening.</p>
+        <a href="#scan" id="scanYourOwnBtn" class="btn btn-primary" style="padding:14px 28px;">Scan your own posture →</a>
+      </div>
+    </div>
+
+    <!-- Expired / Missing State -->
+    <div id="sharedCardExpired" style="display:none; text-align:center; padding:80px 20px; background:var(--surface); border:1px solid var(--line); border-radius:6px;">
+      <div style="width:48px; height:48px; border-radius:50%; background:var(--sage-pale); color:var(--sage); display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:20px; font-family:var(--mono);">!</div>
+      <h2 style="font-size:24px; margin-bottom:10px;">This result has expired</h2>
+      <p style="color:var(--ink-soft); font-size:14.5px; max-width:440px; margin:0 auto 24px;">This shared posture assessment card is no longer available or the link is invalid.</p>
+      <a href="#scan" class="btn btn-primary" style="padding:12px 24px;">Start a free posture scan →</a>
     </div>
   </div>
 </section>
@@ -1621,7 +1664,619 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     }
   });
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   POSTURE SCORE CALCULATION & SEVERITY MAPPING
+═══════════════════════════════════════════════════════════════════ */
+function computePostureScore(m) {
+  const neck = m.neckDeviation ?? m.neck_deviation ?? m.neckDeviationAngle ?? 0;
+  const shoulder = m.shoulderTilt ?? m.shoulder_tilt ?? 0;
+  const head = m.headTilt ?? m.head_tilt ?? 0;
+  const sStab = m.shoulderStability ?? m.shoulder_stability ?? m['Shoulder Stability'] ?? 0;
+  const hStab = m.headStability ?? m.head_stability ?? m['Head Stability'] ?? 0;
+
+  // Neck deviation penalty (up to 40 pts)
+  let neckPenalty = 0;
+  if (neck <= 5) {
+    neckPenalty = neck * 1.0;
+  } else if (neck <= 10) {
+    neckPenalty = 5 + (neck - 5) * 1.6;
+  } else if (neck <= 15) {
+    neckPenalty = 13 + (neck - 10) * 2.2;
+  } else if (neck <= 20) {
+    neckPenalty = 24 + (neck - 15) * 1.8;
+  } else {
+    neckPenalty = Math.min(40, 33 + (neck - 20) * 1.2);
+  }
+
+  // Shoulder tilt penalty (up to 20 pts)
+  let shoulderPenalty = 0;
+  if (shoulder <= 2) {
+    shoulderPenalty = shoulder * 1.5;
+  } else if (shoulder <= 4) {
+    shoulderPenalty = 3 + (shoulder - 2) * 2.5;
+  } else if (shoulder <= 7) {
+    shoulderPenalty = 8 + (shoulder - 4) * 2.0;
+  } else {
+    shoulderPenalty = Math.min(20, 14 + (shoulder - 7) * 1.2);
+  }
+
+  // Head tilt penalty (up to 20 pts)
+  let headPenalty = 0;
+  if (head <= 2) {
+    headPenalty = head * 1.5;
+  } else if (head <= 4) {
+    headPenalty = 3 + (head - 2) * 2.5;
+  } else if (head <= 7) {
+    headPenalty = 8 + (head - 4) * 2.0;
+  } else {
+    headPenalty = Math.min(20, 14 + (head - 7) * 1.2);
+  }
+
+  // Stability penalties (up to 15 pts total: 7.5 max each)
+  const calcStabPenalty = (stab) => {
+    if (stab <= 0.03) return stab * (2 / 0.03);
+    if (stab <= 0.06) return 2 + (stab - 0.03) * (2.2 / 0.03);
+    if (stab <= 0.10) return 4.2 + (stab - 0.06) * (2.0 / 0.04);
+    return Math.min(7.5, 6.2 + (stab - 0.10) * 8);
+  };
+  const sStabPenalty = calcStabPenalty(sStab);
+  const hStabPenalty = calcStabPenalty(hStab);
+
+  const totalPenalty = neckPenalty + shoulderPenalty + headPenalty + sStabPenalty + hStabPenalty;
+  return Math.max(0, Math.min(100, Math.round(100 - totalPenalty)));
+}
+
+function getScoreSeverity(score) {
+  if (score >= 88) return { label: 'Normal', tagClass: 'good', color: '#4A6B5A', bg: 'rgba(74,107,90,.15)' };
+  if (score >= 75) return { label: 'Very Mild', tagClass: 'good', color: '#4A6B5A', bg: 'rgba(74,107,90,.15)' };
+  if (score >= 58) return { label: 'Mild', tagClass: 'caution', color: '#B8935F', bg: 'rgba(184,147,95,.18)' };
+  if (score >= 38) return { label: 'Moderate', tagClass: 'caution', color: '#B8935F', bg: 'rgba(184,147,95,.18)' };
+  return { label: 'Severe', tagClass: 'bad', color: '#A8534A', bg: 'rgba(168,83,74,.18)' };
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CANVAS CARD RENDERING (Phase C)
+═══════════════════════════════════════════════════════════════════ */
+function renderResultCard(canvas, data) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = 800;
+  const H = 480;
+  canvas.width = W;
+  canvas.height = H;
+
+  // Background
+  ctx.fillStyle = '#F6F4EE';
+  ctx.fillRect(0, 0, W, H);
+
+  // Outer Border
+  ctx.strokeStyle = '#E1DED4';
+  ctx.lineWidth = 2;
+  if (ctx.roundRect) {
+    ctx.beginPath();
+    ctx.roundRect(12, 12, W - 24, H - 24, 16);
+    ctx.stroke();
+  } else {
+    ctx.strokeRect(12, 12, W - 24, H - 24);
+  }
+
+  // Header Logo & Branding
+  ctx.fillStyle = '#4A6B5A';
+  ctx.beginPath();
+  ctx.arc(44, 46, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8FA89A';
+  ctx.beginPath();
+  ctx.arc(58, 46, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font = '600 20px Inter, sans-serif';
+  ctx.fillStyle = '#1C1D1B';
+  ctx.textAlign = 'left';
+  ctx.fillText('media', 72, 53);
+  ctx.font = '600 20px Inter, sans-serif';
+  ctx.fillStyle = '#4A6B5A';
+  ctx.fillText('spine', 124, 53);
+
+  ctx.font = '500 11px "IBM Plex Mono", monospace';
+  ctx.fillStyle = '#6B6A64';
+  ctx.textAlign = 'right';
+  ctx.fillText('CLINICAL AI POSTURE SCREENING', W - 40, 52);
+
+  // Divider Line
+  ctx.strokeStyle = '#E1DED4';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(36, 76);
+  ctx.lineTo(W - 36, 76);
+  ctx.stroke();
+
+  const score = Math.max(0, Math.min(100, Math.round(data.score ?? 85)));
+  const sevInfo = getScoreSeverity(score);
+  const severityLabel = data.severity || sevInfo.label;
+  const isProgress = data.variant === 'progress';
+
+  if (!isProgress) {
+    // Single Scan Card
+    ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#6B6A64';
+    ctx.textAlign = 'left';
+    ctx.fillText('OVERALL POSTURE SCORE', 44, 114);
+
+    ctx.font = '480 84px Fraunces, serif';
+    ctx.fillStyle = '#1C1D1B';
+    ctx.fillText(String(score), 42, 195);
+
+    const scoreWidth = ctx.measureText(String(score)).width;
+    ctx.font = '400 28px Fraunces, serif';
+    ctx.fillStyle = '#6B6A64';
+    ctx.fillText('/ 100', 44 + scoreWidth + 8, 172);
+
+    // Severity Badge Pill
+    const badgeX = 44 + scoreWidth + 105;
+    const badgeY = 142;
+    const badgeW = 126;
+    const badgeH = 34;
+
+    ctx.fillStyle = sevInfo.bg;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 17);
+      ctx.fill();
+    } else {
+      ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+    }
+    ctx.fillStyle = sevInfo.color;
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('● ' + severityLabel, badgeX + badgeW / 2, badgeY + 22);
+
+    // 3 Metric breakdown cards
+    const m = data.metrics || {};
+    const metricBoxes = [
+      { label: 'NECK DEVIATION', val: m.neck_deviation != null ? `${Number(m.neck_deviation).toFixed(1)}°` : '—' },
+      { label: 'SHOULDER TILT', val: m.shoulder_tilt != null ? `${Number(m.shoulder_tilt).toFixed(1)}°` : '—' },
+      { label: 'HEAD STABILITY', val: m.head_stability != null ? `${Number(m.head_stability).toFixed(2)} var` : 'Steady' }
+    ];
+
+    const boxW = 224;
+    const boxH = 82;
+    const gap = 20;
+    const startX = 44;
+    const boxY = 240;
+
+    metricBoxes.forEach((bx, idx) => {
+      const bxX = startX + idx * (boxW + gap);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#E1DED4';
+      ctx.lineWidth = 1;
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(bxX, boxY, boxW, boxH, 4);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(bxX, boxY, boxW, boxH);
+        ctx.strokeRect(bxX, boxY, boxW, boxH);
+      }
+
+      ctx.fillStyle = '#6B6A64';
+      ctx.font = '500 10px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(bx.label, bxX + 16, boxY + 28);
+
+      ctx.fillStyle = '#4A6B5A';
+      ctx.font = '600 22px "IBM Plex Mono", monospace';
+      ctx.fillText(bx.val, bxX + 16, boxY + 62);
+    });
+  } else {
+    // Progress Card
+    ctx.font = '500 11px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#6B6A64';
+    ctx.textAlign = 'left';
+    ctx.fillText('POSTURE TRACKING MILESTONE', 44, 114);
+
+    ctx.font = '480 72px Fraunces, serif';
+    ctx.fillStyle = '#1C1D1B';
+    ctx.fillText(String(score), 42, 185);
+
+    const scoreWidth = ctx.measureText(String(score)).width;
+    ctx.font = '400 24px Fraunces, serif';
+    ctx.fillStyle = '#6B6A64';
+    ctx.fillText('/ 100 score', 44 + scoreWidth + 8, 165);
+
+    const milestone = data.milestone || 'Consistent posture tracking over time';
+    ctx.font = '500 15px Inter, sans-serif';
+    ctx.fillStyle = '#4A6B5A';
+    ctx.textAlign = 'left';
+    ctx.fillText('✦ ' + milestone, 44, 230);
+
+    // Sparkline Trend Box
+    const sparkW = 712;
+    const sparkH = 90;
+    const sparkX = 44;
+    const sparkY = 255;
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#E1DED4';
+    ctx.lineWidth = 1;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(sparkX, sparkY, sparkW, sparkH, 4);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(sparkX, sparkY, sparkW, sparkH);
+      ctx.strokeRect(sparkX, sparkY, sparkW, sparkH);
+    }
+
+    const trend = Array.isArray(data.trend) && data.trend.length ? data.trend : [score, score];
+    const tMin = Math.min(...trend) - 2;
+    const tMax = Math.max(...trend) + 2;
+    const sPadX = 30;
+    const sPlotW = sparkW - sPadX * 2;
+    const sPlotH = sparkH - 36;
+
+    ctx.strokeStyle = '#4A6B5A';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    trend.forEach((val, i) => {
+      const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+      const py = sparkY + sparkH - 18 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+
+    trend.forEach((val, i) => {
+      const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+      const py = sparkY + sparkH - 18 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+      ctx.fillStyle = '#8FA89A';
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Footer
+  ctx.strokeStyle = '#E1DED4';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(36, H - 74);
+  ctx.lineTo(W - 36, H - 74);
+  ctx.stroke();
+
+  const d = data.timestamp ? new Date(data.timestamp) : new Date();
+  const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+  ctx.font = '400 11px "IBM Plex Mono", monospace';
+  ctx.fillStyle = '#6B6A64';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Scanned: ${dateStr} • On-device CV • SpineSafe NGO`, 44, H - 36);
+
+  const displayUrl = data.shareUrl || 'mediaspi.vercel.app';
+  ctx.font = '500 11px "IBM Plex Mono", monospace';
+  ctx.fillStyle = '#4A6B5A';
+  ctx.textAlign = 'right';
+  ctx.fillText(displayUrl.replace(/^https?:\/\//, ''), W - 44, H - 36);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SHARE UI & PUBLIC ROUTE HANDLING (Phase D)
+═══════════════════════════════════════════════════════════════════ */
+const shareResultBtn   = document.getElementById('shareResultBtn');
+const shareProgressBtn = document.getElementById('shareProgressBtn');
+const shareModal       = document.getElementById('shareModal');
+const closeShareModal  = document.getElementById('closeShareModal');
+const shareCardPreview = document.getElementById('shareCardPreview');
+const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
+const downloadCardBtn  = document.getElementById('downloadCardBtn');
+
+let currentSharePayload = null;
+let currentShareUrl     = '';
+
+function generateShareId() {
+  return 's_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).substring(4);
+}
+
+async function persistSharePayload(payload) {
+  const shareId = payload.id;
+  // Store locally for zero-latency retrieval
+  try {
+    localStorage.setItem('mediaspine_share_' + shareId, JSON.stringify(payload));
+  } catch (e) {}
+
+  // Save to Supabase shared_results if available (purely anonymous, no user_id/email)
+  if (window.supabaseClient) {
+    try {
+      await window.supabaseClient.from('shared_results').insert({
+        id: shareId,
+        score: payload.score,
+        severity: payload.severity,
+        metrics: payload.metrics,
+        summary: payload.summary,
+        variant: payload.variant,
+        trend: payload.trend,
+        milestone: payload.milestone
+      });
+    } catch (err) {
+      console.warn('[Supabase shared_results insert note]', err);
+    }
+  }
+}
+
+async function handleShareAction(payload) {
+  await persistSharePayload(payload);
+  currentSharePayload = payload;
+  currentShareUrl = `${window.location.origin}/#/r/${payload.id}`;
+
+  const offCanvas = document.createElement('canvas');
+  renderResultCard(offCanvas, {
+    ...payload,
+    shareUrl: currentShareUrl
+  });
+
+  // Mobile Web Share API with image file if supported
+  offCanvas.toBlob(async (blob) => {
+    if (blob && navigator.canShare) {
+      const file = new File([blob], `MediaSpine_Posture_Score_${payload.score}.png`, { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            title: 'My MediaSpine Posture Score',
+            text: `My posture score is ${payload.score}/100 (${payload.severity}) on MediaSpine! Check it out: ${currentShareUrl}`,
+            files: [file]
+          });
+          return;
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') return;
+        }
+      }
+    }
+
+    // Modal fallback for desktop & direct downloads
+    renderResultCard(shareCardPreview, {
+      ...payload,
+      shareUrl: currentShareUrl
+    });
+    if (shareModal) shareModal.classList.add('show');
+  }, 'image/png');
+}
+
+// Single Scan Share
+if (shareResultBtn) {
+  shareResultBtn.addEventListener('click', () => {
+    if (!lastAIData) return;
+    const { metrics, parsed, timestamp } = lastAIData;
+    const score = computePostureScore(metrics);
+    const sev = parsed.severity || getScoreSeverity(score).label;
+    const id = generateShareId();
+
+    const payload = {
+      id,
+      score,
+      severity: sev,
+      variant: 'single',
+      metrics: {
+        neck_deviation: metrics.neckDeviationAngle != null ? parseFloat(metrics.neckDeviationAngle.toFixed(1)) : null,
+        shoulder_tilt: metrics.shoulderTilt != null ? parseFloat(metrics.shoulderTilt.toFixed(1)) : null,
+        head_tilt: metrics.headTilt != null ? parseFloat(metrics.headTilt.toFixed(1)) : null,
+        head_stability: metrics['Head Stability'] != null ? parseFloat(metrics['Head Stability'].toFixed(2)) : null
+      },
+      summary: parsed.summary || '',
+      timestamp: timestamp ? timestamp.toISOString() : new Date().toISOString()
+    };
+
+    handleShareAction(payload);
+  });
+}
+
+// Progress Card Share
+if (shareProgressBtn) {
+  shareProgressBtn.addEventListener('click', async () => {
+    if (!window.supabaseClient) return;
+    const { data: { session } } = await window.supabaseClient.auth.getSession();
+    if (!session?.user?.id) return;
+
+    const { data: scans } = await window.supabaseClient
+      .from('scans')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: true });
+
+    if (!scans || scans.length === 0) return;
+
+    const scores = scans.map(s => computePostureScore({
+      neck_deviation: s.neck_deviation,
+      shoulder_tilt: s.shoulder_tilt,
+      head_tilt: s.head_tilt,
+      shoulder_stability: s.shoulder_stability,
+      head_stability: s.head_stability
+    }));
+
+    const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    const sev = getScoreSeverity(avgScore).label;
+    const id = generateShareId();
+
+    // Compute milestone difference
+    let milestone = `Tracked ${scans.length} scans on MediaSpine`;
+    if (scans.length >= 2) {
+      const firstNeck = scans[0].neck_deviation;
+      const latestNeck = scans[scans.length - 1].neck_deviation;
+      if (firstNeck != null && latestNeck != null) {
+        const diff = (firstNeck - latestNeck).toFixed(1);
+        if (Number(diff) > 0) {
+          milestone = `Improved ${diff}° neck angle over ${scans.length} scans`;
+        } else {
+          milestone = `Completed ${scans.length} verified scans`;
+        }
+      }
+    }
+
+    const payload = {
+      id,
+      score: avgScore,
+      severity: sev,
+      variant: 'progress',
+      trend: scores.slice(-10),
+      milestone,
+      timestamp: new Date().toISOString()
+    };
+
+    handleShareAction(payload);
+  });
+}
+
+// Share Modal Actions
+if (closeShareModal) {
+  closeShareModal.addEventListener('click', () => {
+    if (shareModal) shareModal.classList.remove('show');
+  });
+}
+
+if (shareModal) {
+  shareModal.addEventListener('click', (e) => {
+    if (e.target === shareModal) shareModal.classList.remove('show');
+  });
+}
+
+if (downloadCardBtn) {
+  downloadCardBtn.addEventListener('click', () => {
+    if (!shareCardPreview) return;
+    const link = document.createElement('a');
+    link.download = `MediaSpine_Score_${currentSharePayload?.score || 85}.png`;
+    link.href = shareCardPreview.toDataURL('image/png');
+    link.click();
+  });
+}
+
+if (copyShareLinkBtn) {
+  copyShareLinkBtn.addEventListener('click', async () => {
+    if (!currentShareUrl) return;
+    try {
+      await navigator.clipboard.writeText(currentShareUrl);
+      const originalText = copyShareLinkBtn.textContent;
+      copyShareLinkBtn.textContent = 'Copied to clipboard! ✓';
+      setTimeout(() => { copyShareLinkBtn.textContent = originalText; }, 2500);
+    } catch (e) {
+      if (typeof window.showAuthToast === 'function') {
+        window.showAuthToast('Share URL: ' + currentShareUrl, false);
+      }
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PUBLIC ROUTE (Hash: #/r/<id>)
+═══════════════════════════════════════════════════════════════════ */
+async function handleSharedRoute() {
+  const hash = (typeof window !== 'undefined' && window.location && window.location.hash) ? window.location.hash : '';
+  const sharedView = document.getElementById('sharedResultView');
+  const mainElements = document.querySelectorAll('header.hero, .stats, #how, #metrics, #scan, #progress, #testimonials, #feedback');
+
+  if (hash.startsWith('#/r/')) {
+    const id = hash.slice(5).split('?')[0].trim();
+    if (!id) return;
+
+    mainElements.forEach(el => el.style.display = 'none');
+    if (sharedView) sharedView.style.display = 'block';
+    if (typeof window !== 'undefined' && window.scrollTo) {
+      window.scrollTo(0, 0);
+    }
+
+    const cardContent = document.getElementById('sharedCardContent');
+    const cardExpired = document.getElementById('sharedCardExpired');
+    const publicCanvas = document.getElementById('sharedPublicCanvas');
+
+    let resultData = null;
+
+    // 1. Try Supabase shared_results
+    if (window.supabaseClient) {
+      try {
+        const { data, error } = await window.supabaseClient
+          .from('shared_results')
+          .select('*')
+          .eq('id', id)
+          .single();
+        if (!error && data) {
+          resultData = data;
+        }
+      } catch (err) {
+        console.warn('[Supabase share fetch note]', err);
+      }
+    }
+
+    // 2. Try localStorage fallback
+    if (!resultData) {
+      try {
+        const cached = localStorage.getItem('mediaspine_share_' + id);
+        if (cached) resultData = JSON.parse(cached);
+      } catch (e) {}
+    }
+
+    if (resultData) {
+      if (cardContent) cardContent.style.display = 'block';
+      if (cardExpired) cardExpired.style.display = 'none';
+      renderResultCard(publicCanvas, {
+        ...resultData,
+        shareUrl: `${window.location.origin}/#/r/${id}`
+      });
+    } else {
+      if (cardContent) cardContent.style.display = 'none';
+      if (cardExpired) cardExpired.style.display = 'block';
+    }
+  } else {
+    if (sharedView) sharedView.style.display = 'none';
+    mainElements.forEach(el => {
+      if (el.id === 'progress') {
+        el.style.display = window.currentUser ? 'block' : 'none';
+      } else {
+        el.style.display = '';
+      }
+    });
+  }
+}
+
+const scanYourOwnBtn = document.getElementById('scanYourOwnBtn');
+if (scanYourOwnBtn) {
+  scanYourOwnBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.location.hash = '#scan';
+    handleSharedRoute();
+    const scanEl = document.getElementById('scan');
+    if (scanEl) scanEl.scrollIntoView({ behavior: 'smooth' });
+  });
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('hashchange', handleSharedRoute);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', handleSharedRoute);
+  } else {
+    handleSharedRoute();
+  }
+}
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SHARE RESULT MODAL
+═══════════════════════════════════════════════════════════════════ -->
+<div class="share-modal" id="shareModal">
+  <div class="share-modal-card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+      <h3 style="font-family:var(--display); font-size:20px; font-weight:480;">Share Posture Score Card</h3>
+      <button id="closeShareModal" style="background:none; border:none; font-size:24px; cursor:pointer; color:var(--ink-soft); padding:4px 8px; line-height:1;">×</button>
+    </div>
+    <div style="background:var(--bg); border:1px solid var(--line); border-radius:4px; overflow:hidden; margin-bottom:20px; text-align:center; padding:12px;">
+      <canvas id="shareCardPreview" style="max-width:100%; height:auto; display:block; margin:0 auto;"></canvas>
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:flex-end;">
+      <button class="btn btn-ghost" id="copyShareLinkBtn" style="padding:10px 18px; font-size:13px;">Copy public link</button>
+      <button class="btn btn-primary" id="downloadCardBtn" style="padding:10px 20px; font-size:13px;">Download image (.png)</button>
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
