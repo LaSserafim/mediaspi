@@ -317,39 +317,32 @@
   .history-severity{font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:2px; display:inline-block;}
   .history-severity.good{background:rgba(74,107,90,.2); color:var(--sage);}
   .history-severity.caution{background:rgba(184,147,95,.22); color:var(--amber);}
-  /* ---------- REVEAL SHARE MODAL & PUBLIC RESULT VIEW ---------- */
-  .share-modal{
-    display:none; position:fixed; inset:0; background:rgba(28,29,27,0.78); z-index:200;
-    align-items:center; justify-content:center; padding:20px;
-    opacity:0; transition:opacity 0.25s cubic-bezier(.22,.61,.36,1);
-    backdrop-filter:blur(4px);
+  /* ---------- REVEAL SHARE CARD MODAL ---------- */
+  .share-card-overlay { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; }
+  .share-card-overlay.hidden { display: none; }
+  .share-card-backdrop { position: absolute; inset: 0; background: rgba(20,20,15,0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .share-card-modal { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; transform: scale(0.92); opacity: 0; transition: transform 250ms ease-out, opacity 250ms ease-out; }
+  .share-card-overlay.open .share-card-modal { transform: scale(1); opacity: 1; }
+  #shareCardCanvas { width: min(360px, 85vw); height: auto; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); background: var(--cream, #F6F4EE); display: block; }
+  .share-card-actions { display: flex; gap: 12px; opacity: 0; transform: translateY(8px); transition: opacity 250ms ease-out, transform 250ms ease-out; }
+  .share-card-actions.revealed { opacity: 1; transform: translateY(0); }
+  .share-card-close { position: absolute; top: -14px; right: -14px; width: 34px; height: 34px; border-radius: 50%; background: var(--surface, #FFFFFF); border: 1px solid var(--line, #E1DED4); color: var(--ink, #1C1D1B); font-size: 20px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 14px rgba(0,0,0,0.18); transition: transform 0.15s ease, background 0.15s ease; z-index: 2; }
+  .share-card-close:hover { transform: scale(1.08); background: #FAF8F4; }
+  .share-card-actions button {
+    padding: 10px 18px; font-family: var(--body); font-size: 13.5px; font-weight: 500;
+    border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+    transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease;
   }
-  .share-modal.show{display:flex; opacity:1;}
-  .share-modal-card{
-    background:var(--surface); border:1px solid var(--line); border-radius:8px;
-    max-width:680px; width:100%; padding:28px 28px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.25);
-    position:relative; transform:scale(0.92); opacity:0;
-    transition:transform 0.28s cubic-bezier(.22,.61,.36,1), opacity 0.25s ease;
-  }
-  .share-modal.show .share-modal-card{transform:scale(1); opacity:1;}
-  .share-preview-wrap{
-    background:var(--bg); border:1px solid var(--line); border-radius:6px;
-    overflow:hidden; margin:16px 0 20px; text-align:center; padding:10px;
-    box-shadow:inset 0 1px 3px rgba(0,0,0,0.03);
-  }
-  .share-preview-wrap canvas{
-    max-width:100%; height:auto; display:block; margin:0 auto; border-radius:4px;
-    box-shadow:0 4px 16px rgba(0,0,0,0.08);
-  }
-  .share-actions-row{
-    display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center;
-    opacity:0; transform:translateY(6px); transition:opacity 0.3s ease, transform 0.3s ease;
-  }
-  .share-actions-row.revealed{opacity:1; transform:translateY(0);}
+  .share-card-actions button:hover { transform: translateY(-1px); }
+  #shareCardShareBtn { background: var(--surface, #FFFFFF); border: 1px solid var(--line, #E1DED4); color: var(--ink, #1C1D1B); }
+  #shareCardDownloadBtn { background: var(--sage, #4A6B5A); border: 1px solid var(--sage, #4A6B5A); color: #FFFFFF; }
+  #shareCardDownloadBtn:hover { background: #3E5A4B; }
+  #shareCardCopyBtn { background: var(--surface, #FFFFFF); border: 1px solid var(--line, #E1DED4); color: var(--ink, #1C1D1B); }
 
   @media (prefers-reduced-motion: reduce){
     *{animation-duration:.01ms !important; transition-duration:.01ms !important;}
-    .share-modal, .share-modal-card, .share-actions-row{transition:none !important; opacity:1 !important; transform:none !important;}
+    .share-card-modal, .share-card-actions{transition:none !important; opacity:1 !important; transform:none !important;}
   }
 </style>
 </head>
@@ -1763,13 +1756,17 @@ function getScoreSeverity(score) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   CANVAS CARD RENDERING (Phase A & B: High-Res 1080px & Rich Design)
+   CANVAS CARD RENDERING (Phase A & B: High-Res 1080x1350 & Rich Design)
 ═══════════════════════════════════════════════════════════════════ */
+function severityFor(score) {
+  return getScoreSeverity(score).label;
+}
+
 function renderResultCard(canvas, data, options = {}) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const W = 1080;
-  const H = 608;
+  const W = canvas.width || 1080;
+  const H = canvas.height || 1350;
   canvas.width = W;
   canvas.height = H;
 
@@ -1809,27 +1806,27 @@ function renderResultCard(canvas, data, options = {}) {
 
   // 3. Card Outer Frame (Border with rounded corners)
   ctx.strokeStyle = '#E1DED4';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   if (ctx.roundRect) {
     ctx.beginPath();
-    ctx.roundRect(16, 16, W - 32, H - 32, 16);
+    ctx.roundRect(24, 24, W - 48, H - 48, 24);
     ctx.stroke();
   } else {
-    ctx.strokeRect(16, 16, W - 32, H - 32);
+    ctx.strokeRect(24, 24, W - 48, H - 48);
   }
 
   const finalScore = Math.max(0, Math.min(100, Math.round(data.score ?? 85)));
-  const displayScore = (options.animatedScore !== undefined) ? options.animatedScore : finalScore;
+  const displayScore = finalScore;
   const sevInfo = getScoreSeverity(finalScore);
-  const severityLabel = data.severity || sevInfo.label;
+  const severityLabel = data.severity; // null during animation until reveal completes
   const isProgress = data.variant === 'progress';
 
   // 4. Colored Severity Corner Flourishes / Accent Brackets
   ctx.strokeStyle = sevInfo.color;
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 5;
   ctx.lineCap = 'round';
-  const cLen = 36;
-  const cPad = 16;
+  const cLen = 48;
+  const cPad = 24;
 
   ctx.beginPath();
   // Top-left
@@ -1854,247 +1851,305 @@ function renderResultCard(canvas, data, options = {}) {
   // 5. Header Logo & Brand Placement
   ctx.fillStyle = sevInfo.color;
   ctx.beginPath();
-  ctx.arc(58, 62, 9, 0, Math.PI * 2);
+  ctx.arc(80, 96, 13, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#8FA89A';
   ctx.beginPath();
-  ctx.arc(76, 62, 6.5, 0, Math.PI * 2);
+  ctx.arc(105, 96, 9.5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.font = '700 24px Inter, sans-serif';
+  ctx.font = '700 34px Inter, sans-serif';
   ctx.fillStyle = '#1C1D1B';
   ctx.textAlign = 'left';
-  ctx.fillText('media', 94, 70);
+  ctx.fillText('media', 130, 107);
   ctx.fillStyle = '#4A6B5A';
-  ctx.fillText('spine', 160, 70);
+  ctx.fillText('spine', 222, 107);
 
-  ctx.font = '600 12px "IBM Plex Mono", monospace';
+  ctx.font = '600 14px "IBM Plex Mono", monospace';
   ctx.fillStyle = '#6B6A64';
   ctx.textAlign = 'right';
-  ctx.fillText('CLINICAL AI POSTURE SCREENING • SPINESAFE NGO', W - 52, 68);
+  ctx.fillText('CLINICAL AI POSTURE ASSESSMENT • SPINESAFE NGO', W - 72, 105);
 
-  // Divider Line
+  // Header Divider Line
   ctx.strokeStyle = '#E1DED4';
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(48, 96);
-  ctx.lineTo(W - 48, 96);
+  ctx.moveTo(64, 148);
+  ctx.lineTo(W - 64, 148);
   ctx.stroke();
 
-  // 6. Main Card Body
+  // 6. Score & Badge Section
+  ctx.font = '600 15px "IBM Plex Mono", monospace';
+  ctx.fillStyle = '#6B6A64';
+  ctx.textAlign = 'left';
+  ctx.fillText(isProgress ? 'OVERALL POSTURE PROGRESS' : 'OVERALL POSTURE SCORE', 72, 210);
+
+  // Dominant Serif Score
+  ctx.font = '480 160px Fraunces, serif';
+  ctx.fillStyle = '#1C1D1B';
+  ctx.fillText(String(displayScore), 68, 360);
+
+  const scoreW = ctx.measureText(String(displayScore)).width;
+  ctx.font = '400 44px Fraunces, serif';
+  ctx.fillStyle = '#6B6A64';
+  ctx.fillText('/ 100', 72 + scoreW + 16, 320);
+
+  // Severity Pill Badge (Revealed after count-up completes)
+  if (severityLabel) {
+    const badgeX = 72;
+    const badgeY = 404;
+    const badgeW = 200;
+    const badgeH = 50;
+
+    ctx.fillStyle = sevInfo.bg;
+    ctx.strokeStyle = sevInfo.color;
+    ctx.lineWidth = 2;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 25);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
+      ctx.strokeRect(badgeX, badgeY, badgeW, badgeH);
+    }
+    ctx.fillStyle = sevInfo.color;
+    ctx.font = '600 16px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('● ' + severityLabel.toUpperCase(), badgeX + badgeW / 2, badgeY + 32);
+  }
+
+  // 7. Middle Content Area
   if (!isProgress) {
-    // Single Scan Card
-    ctx.font = '600 13px "IBM Plex Mono", monospace';
-    ctx.fillStyle = '#6B6A64';
-    ctx.textAlign = 'left';
-    ctx.fillText('OVERALL POSTURE SCORE', 56, 142);
-
-    // Dominant Serif Score
-    ctx.font = '480 114px Fraunces, serif';
-    ctx.fillStyle = '#1C1D1B';
-    ctx.fillText(String(displayScore), 54, 252);
-
-    const scoreWidth = ctx.measureText(String(displayScore)).width;
-    ctx.font = '400 36px Fraunces, serif';
-    ctx.fillStyle = '#6B6A64';
-    ctx.fillText('/ 100', 58 + scoreWidth + 10, 222);
-
-    // Severity Pill Badge (Shown after count-up or fullReveal)
-    if (options.showBadge !== false) {
-      const badgeX = 58 + scoreWidth + 140;
-      const badgeY = 184;
-      const badgeW = 164;
-      const badgeH = 44;
-
-      ctx.fillStyle = sevInfo.bg;
-      ctx.strokeStyle = sevInfo.color;
-      ctx.lineWidth = 1.5;
-      if (ctx.roundRect) {
-        ctx.beginPath();
-        ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 22);
-        ctx.fill();
-        ctx.stroke();
-      } else {
-        ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
-        ctx.strokeRect(badgeX, badgeY, badgeW, badgeH);
+    // Single Scan 3 Large Clinical Breakdown Cards
+    const m = data.metrics || {};
+    const metricBoxes = [
+      {
+        label: 'NECK DEVIATION ANGLE',
+        val: m.neck_deviation != null ? `${Number(m.neck_deviation).toFixed(1)}°` : '—',
+        target: 'Optimal: 0°–5° (Neutral head alignment)',
+        status: (m.neck_deviation <= 5 ? 'Normal alignment' : m.neck_deviation <= 15 ? 'Mild forward tilt' : 'Significant deviation')
+      },
+      {
+        label: 'SHOULDER TILT SYMMETRY',
+        val: m.shoulder_tilt != null ? `${Number(m.shoulder_tilt).toFixed(1)}°` : '—',
+        target: 'Optimal: 0°–2° (Bilateral level)',
+        status: (m.shoulder_tilt <= 2 ? 'Bilateral balanced' : 'Lateral tilt detected')
+      },
+      {
+        label: 'HEAD & POSTURAL STABILITY',
+        val: m.head_stability != null ? `${Number(m.head_stability).toFixed(2)} var` : 'Steady',
+        target: 'Optimal: <0.03 (Minimal sway variance)',
+        status: (m.head_stability <= 0.03 ? 'Steady hold' : 'Postural sway detected')
       }
-      ctx.fillStyle = sevInfo.color;
-      ctx.font = '600 14px "IBM Plex Mono", monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('● ' + severityLabel.toUpperCase(), badgeX + badgeW / 2, badgeY + 28);
-    }
+    ];
 
-    // 3 Metric Breakdown Cards (Shown after count-up or fullReveal)
-    if (options.showMetrics !== false) {
-      const m = data.metrics || {};
-      const metricBoxes = [
-        { label: 'NECK DEVIATION', val: m.neck_deviation != null ? `${Number(m.neck_deviation).toFixed(1)}°` : '—', target: 'Normal: 0–5°' },
-        { label: 'SHOULDER TILT', val: m.shoulder_tilt != null ? `${Number(m.shoulder_tilt).toFixed(1)}°` : '—', target: 'Normal: 0–2°' },
-        { label: 'HEAD STABILITY', val: m.head_stability != null ? `${Number(m.head_stability).toFixed(2)} var` : 'Steady', target: 'Steady: <0.03' }
-      ];
+    const cardW = 936;
+    const cardH = 138;
+    const startX = 72;
+    const startY = 490;
+    const gap = 24;
 
-      const boxW = 304;
-      const boxH = 108;
-      const gap = 28;
-      const startX = 56;
-      const boxY = 312;
-
-      metricBoxes.forEach((bx, idx) => {
-        const bxX = startX + idx * (boxW + gap);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.strokeStyle = '#E1DED4';
-        ctx.lineWidth = 1.5;
-        if (ctx.roundRect) {
-          ctx.beginPath();
-          ctx.roundRect(bxX, boxY, boxW, boxH, 6);
-          ctx.fill();
-          ctx.stroke();
-        } else {
-          ctx.fillRect(bxX, boxY, boxW, boxH);
-          ctx.strokeRect(bxX, boxY, boxW, boxH);
-        }
-
-        ctx.fillStyle = '#6B6A64';
-        ctx.font = '600 11px "IBM Plex Mono", monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(bx.label, bxX + 20, boxY + 32);
-
-        ctx.fillStyle = '#4A6B5A';
-        ctx.font = '600 28px "IBM Plex Mono", monospace';
-        ctx.fillText(bx.val, bxX + 20, boxY + 70);
-
-        ctx.fillStyle = '#8FA89A';
-        ctx.font = '500 11px Inter, sans-serif';
-        ctx.fillText(bx.target, bxX + 20, boxY + 92);
-      });
-    }
-  } else {
-    // Progress Card
-    ctx.font = '600 13px "IBM Plex Mono", monospace';
-    ctx.fillStyle = '#6B6A64';
-    ctx.textAlign = 'left';
-    ctx.fillText('POSTURE TRACKING MILESTONE', 56, 142);
-
-    ctx.font = '480 96px Fraunces, serif';
-    ctx.fillStyle = '#1C1D1B';
-    ctx.fillText(String(displayScore), 54, 240);
-
-    const scoreWidth = ctx.measureText(String(displayScore)).width;
-    ctx.font = '400 30px Fraunces, serif';
-    ctx.fillStyle = '#6B6A64';
-    ctx.fillText('/ 100 avg score', 58 + scoreWidth + 10, 214);
-
-    const milestone = data.milestone || 'Consistent posture tracking over time';
-    ctx.font = '600 16px Inter, sans-serif';
-    ctx.fillStyle = '#4A6B5A';
-    ctx.textAlign = 'left';
-    ctx.fillText('✦ ' + milestone, 56, 290);
-
-    if (options.showMetrics !== false) {
-      // Sparkline Box
-      const sparkW = 968;
-      const sparkH = 120;
-      const sparkX = 56;
-      const sparkY = 320;
-
+    metricBoxes.forEach((bx, idx) => {
+      const cy = startY + idx * (cardH + gap);
       ctx.fillStyle = '#FFFFFF';
       ctx.strokeStyle = '#E1DED4';
       ctx.lineWidth = 1.5;
       if (ctx.roundRect) {
         ctx.beginPath();
-        ctx.roundRect(sparkX, sparkY, sparkW, sparkH, 6);
+        ctx.roundRect(startX, cy, cardW, cardH, 10);
         ctx.fill();
         ctx.stroke();
       } else {
-        ctx.fillRect(sparkX, sparkY, sparkW, sparkH);
-        ctx.strokeRect(sparkX, sparkY, sparkW, sparkH);
+        ctx.fillRect(startX, cy, cardW, cardH);
+        ctx.strokeRect(startX, cy, cardW, cardH);
       }
 
-      const trend = Array.isArray(data.trend) && data.trend.length ? data.trend : [displayScore, displayScore];
-      const tMin = Math.min(...trend) - 2;
-      const tMax = Math.max(...trend) + 2;
-      const sPadX = 36;
-      const sPlotW = sparkW - sPadX * 2;
-      const sPlotH = sparkH - 44;
+      // Card Label
+      ctx.fillStyle = '#6B6A64';
+      ctx.font = '600 13px "IBM Plex Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(bx.label, startX + 28, cy + 42);
 
-      // Area fill
-      const grad = ctx.createLinearGradient(0, sparkY + 20, 0, sparkY + sparkH);
-      grad.addColorStop(0, 'rgba(74, 107, 90, 0.16)');
-      grad.addColorStop(1, 'rgba(74, 107, 90, 0.0)');
-      ctx.fillStyle = grad;
+      // Card Big Value
+      ctx.fillStyle = '#4A6B5A';
+      ctx.font = '600 36px "IBM Plex Mono", monospace';
+      ctx.fillText(bx.val, startX + 28, cy + 92);
+
+      // Target & status on right
+      ctx.fillStyle = '#8FA89A';
+      ctx.font = '500 14px Inter, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(bx.target, startX + cardW - 28, cy + 48);
+
+      ctx.fillStyle = '#1C1D1B';
+      ctx.font = '600 15px Inter, sans-serif';
+      ctx.fillText(bx.status, startX + cardW - 28, cy + 86);
+    });
+
+    // Summary Quote Box
+    const sumW = 936;
+    const sumH = 108;
+    const sumY = 980;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#E1DED4';
+    ctx.lineWidth = 1.5;
+    if (ctx.roundRect) {
       ctx.beginPath();
-      ctx.moveTo(sparkX + sPadX, sparkY + sparkH - 20);
-      trend.forEach((val, i) => {
-        const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
-        const py = sparkY + sparkH - 22 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
-        ctx.lineTo(px, py);
-      });
-      ctx.lineTo(sparkX + sPadX + sPlotW, sparkY + sparkH - 20);
-      ctx.closePath();
+      ctx.roundRect(startX, sumY, sumW, sumH, 10);
       ctx.fill();
-
-      // Line
-      ctx.strokeStyle = '#4A6B5A';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      trend.forEach((val, i) => {
-        const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
-        const py = sparkY + sparkH - 22 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      });
       ctx.stroke();
-
-      // Dots
-      trend.forEach((val, i) => {
-        const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
-        const py = sparkY + sparkH - 22 - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.strokeStyle = '#4A6B5A';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      });
+    } else {
+      ctx.fillRect(startX, sumY, sumW, sumH);
+      ctx.strokeRect(startX, sumY, sumW, sumH);
     }
+
+    ctx.fillStyle = '#6B6A64';
+    ctx.font = '600 12px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('BIOMECHANICAL SCREENING SUMMARY', startX + 28, sumY + 36);
+
+    const summaryText = data.summary || 'Real-time on-device computer vision posture screening. Forward tilt, symmetry, and postural micro-sway verified in-browser.';
+    ctx.fillStyle = '#1C1D1B';
+    ctx.font = '400 15px Inter, sans-serif';
+    ctx.fillText(summaryText.length > 105 ? summaryText.substring(0, 102) + '...' : summaryText, startX + 28, sumY + 74);
+
+  } else {
+    // Progress View: Milestone + Trend Graph
+    const startX = 72;
+    const mBoxW = 936;
+    const mBoxH = 92;
+    const mBoxY = 490;
+
+    ctx.fillStyle = '#E7ECE4';
+    ctx.strokeStyle = '#8FA89A';
+    ctx.lineWidth = 1.5;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(startX, mBoxY, mBoxW, mBoxH, 10);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(startX, mBoxY, mBoxW, mBoxH);
+      ctx.strokeRect(startX, mBoxY, mBoxW, mBoxH);
+    }
+
+    const milestone = data.milestone || 'Consistent posture tracking over time';
+    ctx.font = '600 20px Inter, sans-serif';
+    ctx.fillStyle = '#4A6B5A';
+    ctx.textAlign = 'left';
+    ctx.fillText('✦ ' + milestone, startX + 28, mBoxY + 54);
+
+    // Large Sparkline Chart Box
+    const sparkW = 936;
+    const sparkH = 340;
+    const sparkX = 72;
+    const sparkY = 604;
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#E1DED4';
+    ctx.lineWidth = 1.5;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(sparkX, sparkY, sparkW, sparkH, 10);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(sparkX, sparkY, sparkW, sparkH);
+      ctx.strokeRect(sparkX, sparkY, sparkW, sparkH);
+    }
+
+    ctx.fillStyle = '#6B6A64';
+    ctx.font = '600 13px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('HISTORICAL POSTURE SCORE TREND', sparkX + 28, sparkY + 42);
+
+    const trend = Array.isArray(data.trend) && data.trend.length ? data.trend : [displayScore, displayScore];
+    const tMin = Math.min(...trend) - 2;
+    const tMax = Math.max(...trend) + 2;
+    const sPadX = 52;
+    const sPlotW = sparkW - sPadX * 2;
+    const sPlotH = sparkH - 120;
+    const plotBaseY = sparkY + sparkH - 44;
+
+    // Area fill
+    const grad = ctx.createLinearGradient(0, sparkY + 60, 0, plotBaseY);
+    grad.addColorStop(0, 'rgba(74, 107, 90, 0.22)');
+    grad.addColorStop(1, 'rgba(74, 107, 90, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(sparkX + sPadX, plotBaseY);
+    trend.forEach((val, i) => {
+      const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+      const py = plotBaseY - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+      ctx.lineTo(px, py);
+    });
+    ctx.lineTo(sparkX + sPadX + sPlotW, plotBaseY);
+    ctx.closePath();
+    ctx.fill();
+
+    // Line
+    ctx.strokeStyle = '#4A6B5A';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    trend.forEach((val, i) => {
+      const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+      const py = plotBaseY - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+
+    // Dots
+    trend.forEach((val, i) => {
+      const px = sparkX + sPadX + (sPlotW / Math.max(1, trend.length - 1)) * i;
+      const py = plotBaseY - ((val - tMin) / Math.max(1, tMax - tMin)) * sPlotH;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#4A6B5A';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(px, py, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
   }
 
-  // 7. Footer
+  // 8. Footer
   ctx.strokeStyle = '#E1DED4';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(48, H - 90);
-  ctx.lineTo(W - 48, H - 90);
+  ctx.moveTo(64, 1210);
+  ctx.lineTo(W - 64, 1210);
   ctx.stroke();
 
   const d = data.timestamp ? new Date(data.timestamp) : new Date();
   const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-  ctx.font = '500 12px "IBM Plex Mono", monospace';
+  ctx.font = '500 14px "IBM Plex Mono", monospace';
   ctx.fillStyle = '#6B6A64';
   ctx.textAlign = 'left';
-  ctx.fillText(`Verified On-Device Screening • SpineSafe NGO Platform • ${dateStr}`, 56, H - 44);
+  ctx.fillText(`Verified On-Device Screening • SpineSafe NGO Platform • ${dateStr}`, 72, 1264);
 
   const displayUrl = data.shareUrl || 'mediaspi.vercel.app';
-  ctx.font = '600 13px "IBM Plex Mono", monospace';
+  ctx.font = '600 16px "IBM Plex Mono", monospace';
   ctx.fillStyle = '#4A6B5A';
   ctx.textAlign = 'right';
-  ctx.fillText(displayUrl.replace(/^https?:\/\//, ''), W - 56, H - 44);
+  ctx.fillText(displayUrl.replace(/^https?:\/\//, ''), W - 72, 1264);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   SHARE UI, REVEAL MODAL & PUBLIC ROUTE (Phase C & D)
+   SHARE UI, REVEAL MODAL & PUBLIC ROUTE
 ═══════════════════════════════════════════════════════════════════ */
-const shareResultBtn   = document.getElementById('shareResultBtn');
-const shareProgressBtn = document.getElementById('shareProgressBtn');
-const shareModal       = document.getElementById('shareModal');
-const closeShareModal  = document.getElementById('closeShareModal');
-const shareCardPreview = document.getElementById('shareCardPreview');
-const copyShareLinkBtn = document.getElementById('copyShareLinkBtn');
-const downloadCardBtn  = document.getElementById('downloadCardBtn');
-const nativeShareBtn   = document.getElementById('nativeShareBtn');
-const shareActionsRow  = document.getElementById('shareActionsRow');
+const shareResultBtn     = document.getElementById('shareResultBtn');
+const shareProgressBtn   = document.getElementById('shareProgressBtn');
+const shareCardOverlay   = document.getElementById('shareCardOverlay');
+const shareCardCanvas    = document.getElementById('shareCardCanvas');
+const shareCardCloseBtn  = document.getElementById('shareCardCloseBtn');
+const shareCardShareBtn  = document.getElementById('shareCardShareBtn');
+const shareCardDownloadBtn = document.getElementById('shareCardDownloadBtn');
+const shareCardCopyBtn   = document.getElementById('shareCardCopyBtn');
+const shareCardBackdrop  = document.querySelector('.share-card-backdrop');
+const shareCardActions   = document.querySelector('.share-card-actions');
 
 let currentSharePayload = null;
 let currentShareUrl     = '';
@@ -2130,7 +2185,21 @@ async function persistSharePayload(payload) {
   }
 }
 
-function openRevealModal(payload) {
+function closeShareModal() {
+  if (revealAnimFrame) {
+    cancelAnimationFrame(revealAnimFrame);
+    revealAnimFrame = null;
+  }
+  if (shareCardOverlay) {
+    shareCardOverlay.classList.remove('open');
+    setTimeout(() => {
+      shareCardOverlay.classList.add('hidden');
+      if (document.body) document.body.style.overflow = '';
+    }, 250);
+  }
+}
+
+function openShareRevealModal(payload) {
   if (revealAnimFrame) {
     cancelAnimationFrame(revealAnimFrame);
     revealAnimFrame = null;
@@ -2140,94 +2209,104 @@ function openRevealModal(payload) {
   currentShareUrl = `${window.location.origin}/#/r/${payload.id}`;
   persistSharePayload(payload);
 
-  if (shareModal) shareModal.classList.add('show');
-  if (shareActionsRow) shareActionsRow.classList.remove('revealed');
+  if (document.body) document.body.style.overflow = 'hidden';
+  if (shareCardOverlay) {
+    shareCardOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        shareCardOverlay.classList.add('open');
+      });
+    });
+  }
+  if (shareCardActions) shareCardActions.classList.remove('revealed');
 
-  const targetScore = Math.max(0, Math.min(100, Math.round(payload.score ?? 85)));
+  const finalScore = computePostureScore(payload.metrics || payload);
+  const canvas = shareCardCanvas;
   const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Single PNG generation helper
-  const finalizePNG = () => {
-    if (shareCardPreview && shareCardPreview.toBlob) {
-      shareCardPreview.toBlob((blob) => {
+  function onRevealComplete() {
+    renderResultCard(canvas, {
+      ...payload,
+      score: finalScore,
+      severity: severityFor(finalScore),
+      shareUrl: currentShareUrl
+    });
+
+    if (shareCardActions) {
+      setTimeout(() => {
+        shareCardActions.classList.add('revealed');
+      }, 120);
+    }
+
+    // Confetti on Normal (finalScore >= 85) with origin from the canvas bounding rect
+    if (finalScore >= 85 && typeof confetti === 'function' && canvas) {
+      try {
+        const rect = canvas.getBoundingClientRect();
+        const x = (rect.left + rect.width / 2) / (window.innerWidth || 1);
+        const y = (rect.top + rect.height * 0.35) / (window.innerHeight || 1);
+        confetti({
+          particleCount: 50,
+          spread: 70,
+          origin: {
+            x: Math.max(0.05, Math.min(0.95, x)),
+            y: Math.max(0.05, Math.min(0.95, y))
+          },
+          colors: ['#4A6B5A', '#8FA89A', '#B8935F', '#E7ECE4']
+        });
+      } catch (e) {}
+    }
+
+    // Generate high-res image once for all buttons
+    if (canvas && canvas.toBlob) {
+      canvas.toBlob((blob) => {
         cachedCardBlob = blob;
-        cachedCardDataUrl = shareCardPreview.toDataURL('image/png');
+        cachedCardDataUrl = canvas.toDataURL('image/png');
       }, 'image/png');
     }
-  };
+  }
 
   if (prefersReducedMotion) {
-    // Instant reveal path
-    renderResultCard(shareCardPreview, {
-      ...payload,
-      shareUrl: currentShareUrl
-    }, { animatedScore: targetScore, showBadge: true, showMetrics: true });
-
-    if (shareActionsRow) shareActionsRow.classList.add('revealed');
-    finalizePNG();
-  } else {
-    // Sequenced Reveal Animation
-    const duration = 900;
-    const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-
-    function step(now) {
-      const elapsed = Math.min(duration, now - startTime);
-      // Ease out cubic
-      const progress = 1 - Math.pow(1 - elapsed / duration, 3);
-      const currentScore = Math.round(progress * targetScore);
-      const isDone = elapsed >= duration;
-
-      renderResultCard(shareCardPreview, {
-        ...payload,
-        shareUrl: currentShareUrl
-      }, {
-        animatedScore: currentScore,
-        showBadge: isDone,
-        showMetrics: isDone
-      });
-
-      if (!isDone) {
-        revealAnimFrame = requestAnimationFrame(step);
-      } else {
-        revealAnimFrame = null;
-        finalizePNG();
-
-        // Trigger confetti ONLY if severity is Normal (or score >= 88)
-        if (payload.severity === 'Normal' || targetScore >= 88) {
-          if (typeof confetti === 'function') {
-            confetti({
-              particleCount: 45,
-              spread: 60,
-              origin: { y: 0.65 },
-              colors: ['#4A6B5A', '#8FA89A', '#B8935F', '#E7ECE4']
-            });
-          }
-        }
-
-        // Stagger reveal action buttons
-        setTimeout(() => {
-          if (shareActionsRow) shareActionsRow.classList.add('revealed');
-        }, 150);
-      }
-    }
-
-    revealAnimFrame = requestAnimationFrame(step);
+    onRevealComplete();
+    return;
   }
+
+  // Animate score counting up by redrawing live canvas on every frame
+  const duration = 900;
+  const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+  function frame(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - t, 2);
+    const displayScore = Math.round(finalScore * eased);
+    renderResultCard(canvas, {
+      ...payload,
+      score: displayScore,
+      severity: t < 1 ? null : severityFor(finalScore),
+      shareUrl: currentShareUrl
+    });
+    if (t < 1) {
+      revealAnimFrame = requestAnimationFrame(frame);
+    } else {
+      revealAnimFrame = null;
+      onRevealComplete();
+    }
+  }
+
+  revealAnimFrame = requestAnimationFrame(frame);
 }
 
-// Single Scan Share
+// Single Scan Share Button
 if (shareResultBtn) {
   shareResultBtn.addEventListener('click', () => {
     if (!lastAIData) return;
     const { metrics, parsed, timestamp } = lastAIData;
     const score = computePostureScore(metrics);
-    const sev = parsed.severity || getScoreSeverity(score).label;
     const id = generateShareId();
 
     const payload = {
       id,
       score,
-      severity: sev,
+      severity: severityFor(score),
       variant: 'single',
       metrics: {
         neck_deviation: metrics.neckDeviationAngle != null ? parseFloat(metrics.neckDeviationAngle.toFixed(1)) : null,
@@ -2235,15 +2314,15 @@ if (shareResultBtn) {
         head_tilt: metrics.headTilt != null ? parseFloat(metrics.headTilt.toFixed(1)) : null,
         head_stability: metrics['Head Stability'] != null ? parseFloat(metrics['Head Stability'].toFixed(2)) : null
       },
-      summary: parsed.summary || '',
+      summary: parsed?.summary || '',
       timestamp: timestamp ? timestamp.toISOString() : new Date().toISOString()
     };
 
-    openRevealModal(payload);
+    openShareRevealModal(payload);
   });
 }
 
-// Progress Card Share
+// Progress Card Share Button
 if (shareProgressBtn) {
   shareProgressBtn.addEventListener('click', async () => {
     if (!window.supabaseClient) return;
@@ -2267,7 +2346,6 @@ if (shareProgressBtn) {
     }));
 
     const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-    const sev = getScoreSeverity(avgScore).label;
     const id = generateShareId();
 
     let milestone = `Tracked ${scans.length} scans on MediaSpine`;
@@ -2287,23 +2365,23 @@ if (shareProgressBtn) {
     const payload = {
       id,
       score: avgScore,
-      severity: sev,
+      severity: severityFor(avgScore),
       variant: 'progress',
       trend: scores.slice(-10),
       milestone,
       timestamp: new Date().toISOString()
     };
 
-    openRevealModal(payload);
+    openShareRevealModal(payload);
   });
 }
 
-// Native Share action
-if (nativeShareBtn) {
-  nativeShareBtn.addEventListener('click', async () => {
+// Share Button (Native Web Share / Fallback)
+if (shareCardShareBtn) {
+  shareCardShareBtn.addEventListener('click', async () => {
     if (!currentSharePayload) return;
     const score = currentSharePayload.score;
-    const sev = currentSharePayload.severity;
+    const sev = currentSharePayload.severity || severityFor(score);
 
     if (cachedCardBlob && navigator.canShare) {
       const file = new File([cachedCardBlob], `MediaSpine_Posture_Score_${score}.png`, { type: 'image/png' });
@@ -2331,24 +2409,24 @@ if (nativeShareBtn) {
   });
 }
 
-// Download action
-if (downloadCardBtn) {
-  downloadCardBtn.addEventListener('click', () => {
-    if (!shareCardPreview) return;
+// Download Button
+if (shareCardDownloadBtn) {
+  shareCardDownloadBtn.addEventListener('click', () => {
+    if (!shareCardCanvas) return;
     const link = document.createElement('a');
     link.download = `MediaSpine_Posture_Score_${currentSharePayload?.score || 85}.png`;
-    link.href = cachedCardDataUrl || shareCardPreview.toDataURL('image/png');
+    link.href = cachedCardDataUrl || shareCardCanvas.toDataURL('image/png');
     link.click();
   });
 }
 
-// Copy link action
-if (copyShareLinkBtn) {
-  copyShareLinkBtn.addEventListener('click', async () => {
+// Copy Link Button
+if (shareCardCopyBtn) {
+  shareCardCopyBtn.addEventListener('click', async () => {
     if (!currentShareUrl) return;
     try {
       await navigator.clipboard.writeText(currentShareUrl);
-      const span = copyShareLinkBtn.querySelector('.btn-label') || copyShareLinkBtn;
+      const span = shareCardCopyBtn.querySelector('span') || shareCardCopyBtn;
       const originalText = span.textContent;
       span.textContent = 'Copied! ✓';
       setTimeout(() => { span.textContent = originalText; }, 2500);
@@ -2360,19 +2438,14 @@ if (copyShareLinkBtn) {
   });
 }
 
-// Close Modal
-function closeRevealModal() {
-  if (revealAnimFrame) {
-    cancelAnimationFrame(revealAnimFrame);
-    revealAnimFrame = null;
-  }
-  if (shareModal) shareModal.classList.remove('show');
-}
-
-if (closeShareModal) closeShareModal.addEventListener('click', closeRevealModal);
-if (shareModal) {
-  shareModal.addEventListener('click', (e) => {
-    if (e.target === shareModal) closeRevealModal();
+// Close Triggers
+if (shareCardCloseBtn) shareCardCloseBtn.addEventListener('click', closeShareModal);
+if (shareCardBackdrop) shareCardBackdrop.addEventListener('click', closeShareModal);
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && shareCardOverlay && !shareCardOverlay.classList.contains('hidden')) {
+      closeShareModal();
+    }
   });
 }
 
@@ -2469,38 +2542,27 @@ if (typeof window !== 'undefined') {
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════
-     SHARE RESULT REVEAL MODAL (Phase B & C)
+     SHARE RESULT REVEAL MODAL (Exact Skeleton)
 ═══════════════════════════════════════════════════════════════════ -->
-<div class="share-modal" id="shareModal">
-  <div class="share-modal-card">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <div>
-        <div class="eyebrow" style="font-size:11px; margin-bottom:2px;">Verified on-device screening</div>
-        <h3 style="font-family:var(--display); font-size:22px; font-weight:480; color:var(--ink);">Posture Assessment Card</h3>
-      </div>
-      <button id="closeShareModal" aria-label="Close" style="background:none; border:none; cursor:pointer; color:var(--ink-soft); padding:6px; border-radius:4px; display:inline-flex; align-items:center; justify-content:center;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+<div id="shareCardOverlay" class="share-card-overlay hidden">
+  <div class="share-card-backdrop"></div>
+  <div class="share-card-modal">
+    <canvas id="shareCardCanvas" width="1080" height="1350"></canvas>
+    <div class="share-card-actions">
+      <button id="shareCardShareBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <span>Share</span>
+      </button>
+      <button id="shareCardDownloadBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Download</span>
+      </button>
+      <button id="shareCardCopyBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span>Copy link</span>
       </button>
     </div>
-
-    <div class="share-preview-wrap">
-      <canvas id="shareCardPreview"></canvas>
-    </div>
-
-    <div class="share-actions-row" id="shareActionsRow">
-      <button class="btn btn-ghost" id="nativeShareBtn" style="padding:10px 16px; font-size:13px; display:inline-flex; align-items:center; gap:7px;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-        <span class="btn-label">Share card</span>
-      </button>
-      <button class="btn btn-ghost" id="copyShareLinkBtn" style="padding:10px 16px; font-size:13px; display:inline-flex; align-items:center; gap:7px;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        <span class="btn-label">Copy link</span>
-      </button>
-      <button class="btn btn-primary" id="downloadCardBtn" style="padding:10px 20px; font-size:13px; display:inline-flex; align-items:center; gap:7px;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span class="btn-label">Download image (.png)</span>
-      </button>
-    </div>
+    <button id="shareCardCloseBtn" class="share-card-close" aria-label="Close">×</button>
   </div>
 </div>
 

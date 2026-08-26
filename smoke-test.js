@@ -86,16 +86,38 @@ if (targetUrl) {
   console.log('✅ index.html is 100% clean of removed features');
 
   // Test evaluating in mock DOM
+  const makeMockEl = (id = '') => ({
+    id,
+    textContent: '',
+    getContext: () => ({
+      clearRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, arc(){}, fill(){},
+      roundRect(){}, strokeRect(){}, fillRect(){}, save(){}, restore(){}, createLinearGradient: () => ({ addColorStop(){} }),
+      measureText: () => ({ width: 50 })
+    }),
+    classList: { add(){}, remove(){}, contains: () => false },
+    style: {},
+    addEventListener(){},
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    getBoundingClientRect: () => ({ left: 100, top: 100, width: 360, height: 450 }),
+    toDataURL: () => 'data:image/png;base64,',
+    toBlob: (cb) => cb && cb(new Blob([]))
+  });
+
   global.document = {
     querySelectorAll: () => [],
-    getElementById: (id) => ({ id, textContent: '', getContext: () => ({ clearRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, arc(){}, fill(){}, roundRect(){} }), classList: { add(){}, remove(){} }, style: {}, addEventListener(){} }),
-    body: { classList: { add(){}, remove(){} } }
+    querySelector: (sel) => makeMockEl(),
+    getElementById: (id) => makeMockEl(id),
+    body: { classList: { add(){}, remove(){} }, style: {} }
   };
   global.window = {
     location: { hash: '', origin: 'http://localhost:5173', pathname: '/', search: '' },
     scrollTo() {},
     addEventListener() {},
-    removeEventListener() {}
+    removeEventListener() {},
+    innerWidth: 1280,
+    innerHeight: 800,
+    matchMedia: () => ({ matches: false })
   };
   global.IntersectionObserver = class { observe(){} };
   global.localStorage = { getItem: () => null, setItem: () => {} };
