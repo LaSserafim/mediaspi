@@ -484,14 +484,27 @@
     }
   };
 
+  async function pingActivity(session) {
+    if (!session || !session.user) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const client = window.supabaseClient || supabase;
+    if (!client) return;
+    await client
+      .from('user_activity')
+      .upsert({ user_id: session.user.id, activity_date: today }, { onConflict: 'user_id,activity_date' })
+      .then(() => {}, () => {}); // never block or surface errors from this — it's a background ping
+  }
+
   // Check initial session
   supabase.auth.getSession().then(({ data: { session } }) => {
     updateAuthUI(session);
+    if (session) pingActivity(session);
   });
 
   // Listen for realtime auth changes
   supabase.auth.onAuthStateChange((_event, session) => {
     updateAuthUI(session);
+    if (session) pingActivity(session);
   });
 </script>
 
