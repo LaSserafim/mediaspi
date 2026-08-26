@@ -827,6 +827,73 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════════
+     ADMIN ACTIVITY STATS (Route: #/admin/stats)
+═══════════════════════════════════════════════════════════════════ -->
+<section id="adminStatsView" class="progress-section" style="display:none; padding:60px 0; min-height:80vh;">
+  <div class="wrap" style="max-width:960px;">
+    <div class="section-head in" style="margin-bottom:32px;">
+      <div class="eyebrow">Platform analytics</div>
+      <h2>User Activity Stats</h2>
+      <p>Aggregated user growth and daily active engagement metrics over the last 30 days.</p>
+    </div>
+
+    <!-- Loading State -->
+    <div id="adminLoading" style="text-align:center; padding:60px 20px;">
+      <div style="font-family:var(--mono); font-size:13px; color:var(--sage); display:inline-flex; align-items:center; gap:8px;">
+        <span style="display:inline-block; width:14px; height:14px; border:2px solid var(--sage-light); border-top-color:var(--sage); border-radius:50%; animation:spin 0.8s linear infinite;"></span>
+        Loading platform statistics...
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="adminEmpty" class="progress-empty" style="display:none; background:var(--surface); border:1px solid var(--line); border-radius:4px; margin-bottom:32px;">
+      <p id="adminEmptyMsg">No activity recorded yet.</p>
+    </div>
+
+    <!-- Content Container -->
+    <div id="adminContent" style="display:none;">
+      <!-- Stat Row (2 columns) -->
+      <div class="progress-stats" style="grid-template-columns:repeat(2,1fr);">
+        <div class="progress-stat-item">
+          <span class="label">Total Users</span>
+          <div class="val" id="adminTotalUsers">—</div>
+        </div>
+        <div class="progress-stat-item">
+          <span class="label">Active Today</span>
+          <div class="val" id="adminActiveToday">—</div>
+        </div>
+      </div>
+
+      <!-- Chart 1: Total Users Over Time -->
+      <div class="chart-box">
+        <div class="chart-header">
+          <div>
+            <h3>Total Users Over Time</h3>
+            <span class="sub">Cumulative distinct users through date</span>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="adminTotalUsersCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 2: Daily Active Users -->
+      <div class="chart-box">
+        <div class="chart-header">
+          <div>
+            <h3>Daily Active Users</h3>
+            <span class="sub">Distinct active users per day</span>
+          </div>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="adminActiveDailyCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
      SHARE RESULT REVEAL MODAL (Exact Skeleton)
 ═══════════════════════════════════════════════════════════════════ -->
 <div id="shareCardOverlay" class="share-card-overlay hidden">
@@ -2488,12 +2555,274 @@ if (typeof window !== 'undefined') {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   PUBLIC ROUTE (Hash: #/r/<id>)
+   ADMIN ACTIVITY STATS (Route: #/admin/stats)
+═══════════════════════════════════════════════════════════════════ */
+let adminStatsData = null;
+
+function renderAdminLineChart(canvas, dataPoints, options = {}) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+
+  const w = rect.width;
+  const h = rect.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (!dataPoints || dataPoints.length === 0) return;
+
+  const values = dataPoints.map(p => p.val);
+  const minVal = 0;
+  const rawMax = Math.max(...values);
+  const maxVal = rawMax <= 4 ? 5 : Math.ceil(rawMax * 1.15);
+
+  const padLeft = 42, padRight = 24, padTop = 22, padBottom = 34;
+  const plotW = w - padLeft - padRight;
+  const plotH = h - padTop - padBottom;
+
+  // 1. Grid Lines & Y-axis labels
+  ctx.strokeStyle = 'rgba(225, 222, 212, 0.9)';
+  ctx.lineWidth = 1;
+  const gridSteps = 4;
+  for (let i = 0; i <= gridSteps; i++) {
+    const y = padTop + (plotH / gridSteps) * i;
+    const val = Math.round(maxVal - (maxVal - minVal) * (i / gridSteps));
+    ctx.beginPath();
+    ctx.moveTo(padLeft, y);
+    ctx.lineTo(w - padRight, y);
+    ctx.stroke();
+
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#6B6A64';
+    ctx.textAlign = 'right';
+    ctx.fillText(String(val), padLeft - 8, y + 3);
+  }
+
+  // 2. Calculate point coordinates
+  const pts = dataPoints.map((p, i) => {
+    const x = dataPoints.length === 1
+      ? padLeft + plotW / 2
+      : padLeft + (plotW / (dataPoints.length - 1)) * i;
+    const y = padTop + plotH - ((p.val - minVal) / Math.max(1, maxVal - minVal)) * plotH;
+    return { x, y, val: p.val, date: p.date };
+  });
+
+  // 3. Single Sage Trend Line (2px stroke, round ends)
+  ctx.strokeStyle = '#4A6B5A';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  pts.forEach((pt, i) => {
+    if (i === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  });
+  ctx.stroke();
+
+  // 4. Area Gradient Under Curve
+  if (pts.length > 1) {
+    const grad = ctx.createLinearGradient(0, padTop, 0, h - padBottom);
+    grad.addColorStop(0, 'rgba(74, 107, 90, 0.16)');
+    grad.addColorStop(1, 'rgba(74, 107, 90, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, h - padBottom);
+    pts.forEach(pt => ctx.lineTo(pt.x, pt.y));
+    ctx.lineTo(pts[pts.length - 1].x, h - padBottom);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // 5. Markers at data points & X-axis labels
+  const labelInterval = Math.max(1, Math.floor(pts.length / 6));
+  pts.forEach((pt, idx) => {
+    ctx.fillStyle = '#8FA89A';
+    ctx.strokeStyle = '#4A6B5A';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // X-axis date labels spaced appropriately
+    if (idx % labelInterval === 0 || idx === pts.length - 1) {
+      const parts = pt.date ? pt.date.split('-') : [];
+      const label = parts.length >= 3 ? `${parseInt(parts[1], 10)}/${parseInt(parts[2], 10)}` : pt.date;
+      ctx.font = '10px "IBM Plex Mono", monospace';
+      ctx.fillStyle = '#6B6A64';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, pt.x, h - 10);
+    }
+  });
+
+  // 6. Interactive Hover Tooltip
+  if (options.hoveredIdx != null && pts[options.hoveredIdx]) {
+    const hPt = pts[options.hoveredIdx];
+
+    // Vertical guideline
+    ctx.strokeStyle = 'rgba(74, 107, 90, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(hPt.x, padTop);
+    ctx.lineTo(hPt.x, h - padBottom);
+    ctx.stroke();
+
+    // Highlight dot
+    ctx.fillStyle = '#4A6B5A';
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(hPt.x, hPt.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Floating Tooltip Box
+    const text = `${hPt.date}: ${hPt.val}${options.unit || ''}`;
+    ctx.font = '500 11px "IBM Plex Mono", monospace';
+    const textW = ctx.measureText(text).width;
+    const tipW = textW + 16;
+    const tipH = 26;
+    let tipX = hPt.x - tipW / 2;
+    if (tipX < 8) tipX = 8;
+    if (tipX + tipW > w - 8) tipX = w - tipW - 8;
+    let tipY = hPt.y - tipH - 10;
+    if (tipY < 6) tipY = hPt.y + 14;
+
+    ctx.fillStyle = '#1C1D1B';
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(tipX, tipY, tipW, tipH, 4);
+      ctx.fill();
+    } else {
+      ctx.fillRect(tipX, tipY, tipW, tipH);
+    }
+
+    ctx.fillStyle = '#F6F4EE';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, tipX + tipW / 2, tipY + 17);
+  }
+
+  // Bind mouse interactions once
+  if (!canvas._hasHoverBound) {
+    canvas._hasHoverBound = true;
+    canvas.addEventListener('mousemove', (e) => {
+      const cRect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - cRect.left;
+      const currentPts = canvas._currentPoints || [];
+      if (currentPts.length === 0) return;
+
+      let closestIdx = -1;
+      let minDistance = Infinity;
+      currentPts.forEach((pt, i) => {
+        const dist = Math.abs(pt.x - mouseX);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestIdx = i;
+        }
+      });
+
+      if (closestIdx !== -1 && minDistance < 36) {
+        renderAdminLineChart(canvas, canvas._currentDataPoints, {
+          ...canvas._currentOptions,
+          hoveredIdx: closestIdx
+        });
+      } else {
+        renderAdminLineChart(canvas, canvas._currentDataPoints, {
+          ...canvas._currentOptions,
+          hoveredIdx: null
+        });
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      renderAdminLineChart(canvas, canvas._currentDataPoints, {
+        ...canvas._currentOptions,
+        hoveredIdx: null
+      });
+    });
+  }
+
+  canvas._currentPoints = pts;
+  canvas._currentDataPoints = dataPoints;
+  canvas._currentOptions = options;
+}
+
+async function loadAdminStats() {
+  const loading = document.getElementById('adminLoading');
+  const empty = document.getElementById('adminEmpty');
+  const content = document.getElementById('adminContent');
+  const totalUsersEl = document.getElementById('adminTotalUsers');
+  const activeTodayEl = document.getElementById('adminActiveToday');
+  const canvas1 = document.getElementById('adminTotalUsersCanvas');
+  const canvas2 = document.getElementById('adminActiveDailyCanvas');
+
+  if (loading) loading.style.display = 'block';
+  if (empty) empty.style.display = 'none';
+  if (content) content.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/stats');
+    if (!res.ok) {
+      throw new Error(`Failed to fetch stats (HTTP ${res.status})`);
+    }
+    const data = await res.json();
+    adminStatsData = data;
+
+    if (!data || !Array.isArray(data.daily) || data.daily.length === 0 || (data.totalUsers === 0 && data.activeToday === 0)) {
+      if (loading) loading.style.display = 'none';
+      if (empty) empty.style.display = 'block';
+      return;
+    }
+
+    if (totalUsersEl) totalUsersEl.textContent = data.totalUsers ?? 0;
+    if (activeTodayEl) activeTodayEl.textContent = data.activeToday ?? 0;
+
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'block';
+
+    // Render charts
+    const totalSeries = data.daily.map(d => ({ date: d.date, val: d.cumulativeTotal }));
+    const activeSeries = data.daily.map(d => ({ date: d.date, val: d.active }));
+
+    renderAdminLineChart(canvas1, totalSeries, { unit: ' users' });
+    renderAdminLineChart(canvas2, activeSeries, { unit: ' active' });
+  } catch (err) {
+    console.warn('[Admin stats fetch error]', err);
+    if (loading) loading.style.display = 'none';
+    if (empty) {
+      empty.style.display = 'block';
+      const msg = document.getElementById('adminEmptyMsg');
+      if (msg) msg.textContent = 'No activity recorded yet.';
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PUBLIC ROUTE (Hash: #/r/<id> & #/admin/stats)
 ═══════════════════════════════════════════════════════════════════ */
 async function handleSharedRoute() {
   const hash = (typeof window !== 'undefined' && window.location && window.location.hash) ? window.location.hash : '';
   const sharedView = document.getElementById('sharedResultView');
+  const adminView = document.getElementById('adminStatsView');
   const mainElements = document.querySelectorAll('header.hero, .stats, #how, #metrics, #scan, #progress, #testimonials, #feedback');
+
+  if (hash === '#/admin/stats' || hash.startsWith('#/admin/stats')) {
+    mainElements.forEach(el => el.style.display = 'none');
+    if (sharedView) sharedView.style.display = 'none';
+    if (adminView) adminView.style.display = 'block';
+    if (typeof window !== 'undefined' && window.scrollTo) {
+      window.scrollTo(0, 0);
+    }
+    loadAdminStats();
+    return;
+  }
+
+  if (adminView) adminView.style.display = 'none';
 
   if (hash.startsWith('#/r/')) {
     const id = hash.slice(5).split('?')[0].trim();
@@ -2571,6 +2900,16 @@ if (scanYourOwnBtn) {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', handleSharedRoute);
+  window.addEventListener('resize', () => {
+    const adminView = document.getElementById('adminStatsView');
+    if (adminView && adminView.style.display !== 'none' && adminStatsData && Array.isArray(adminStatsData.daily)) {
+      const canvas1 = document.getElementById('adminTotalUsersCanvas');
+      const canvas2 = document.getElementById('adminActiveDailyCanvas');
+      renderAdminLineChart(canvas1, adminStatsData.daily.map(d => ({ date: d.date, val: d.cumulativeTotal })), { unit: ' users' });
+      renderAdminLineChart(canvas2, adminStatsData.daily.map(d => ({ date: d.date, val: d.active })), { unit: ' active' });
+    }
+  });
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', handleSharedRoute);
   } else {
