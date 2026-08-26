@@ -139,7 +139,7 @@ if (targetUrl) {
     process.exit(1);
   }
 
-  console.log('\n--- [3/3] Checking dist/ build integrity ---');
+  console.log('\n--- [3/4] Checking dist/ build integrity ---');
   if (fs.existsSync('dist/index.html')) {
     console.log('✅ Production bundle dist/index.html exists');
   } else {
@@ -147,5 +147,19 @@ if (targetUrl) {
     process.exit(1);
   }
 
-  console.log('\n🎉 ALL BASELINE SMOKE TESTS PASSED!');
+  console.log('\n--- [4/4] Checking api/stats.js ---');
+  if (fs.existsSync('api/stats.js')) {
+    const statsJs = fs.readFileSync('api/stats.js', 'utf8');
+    if (statsJs.includes('SUPABASE_SERVICE_ROLE_KEY') && statsJs.includes('user_activity')) {
+      console.log('✅ api/stats.js uses SUPABASE_SERVICE_ROLE_KEY and queries user_activity');
+    } else {
+      console.error('❌ api/stats.js missing SUPABASE_SERVICE_ROLE_KEY or user_activity logic');
+      process.exit(1);
+    }
+  } else {
+    console.error('❌ api/stats.js missing');
+    process.exit(1);
+  }
+
+  console.log('\n🎉 ALL BASELINE SMOKE TESTS PASSED!\n');
 }
