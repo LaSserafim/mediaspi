@@ -489,10 +489,12 @@
     const today = new Date().toISOString().slice(0, 10);
     const client = window.supabaseClient || supabase;
     if (!client) return;
-    await client
+    const { error } = await client
       .from('user_activity')
-      .upsert({ user_id: session.user.id, activity_date: today }, { onConflict: 'user_id,activity_date' })
-      .then(() => {}, () => {}); // never block or surface errors from this — it's a background ping
+      .upsert({ user_id: session.user.id, activity_date: today }, { onConflict: 'user_id,activity_date' });
+    if (error) {
+      console.error('[pingActivity failed]', error.message, error.details || '', error.hint || '', error.code || '');
+    }
   }
 
   // Check initial session
