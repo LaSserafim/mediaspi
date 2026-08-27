@@ -33,8 +33,7 @@ export default async function handler(req, res) {
 
     const { data, error } = await supabase
       .from('user_activity')
-      .select('user_id, activity_date')
-      .order('activity_date', { ascending: true });
+      .select('user_id, activity_date');
 
     if (error) {
       console.error('[Supabase user_activity error]', error);
@@ -54,36 +53,15 @@ export default async function handler(req, res) {
     );
     const activeToday = todayUsers.size;
 
-    // 3. Last 30 days daily stats: { date, active, cumulativeTotal }
-    const daily = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date();
-      d.setUTCDate(d.getUTCDate() - i);
-      const dStr = d.toISOString().slice(0, 10);
-
-      const activeSet = new Set(
-        records.filter(r => r.activity_date === dStr).map(r => r.user_id).filter(Boolean)
-      );
-      const cumulativeSet = new Set(
-        records.filter(r => r.activity_date <= dStr).map(r => r.user_id).filter(Boolean)
-      );
-
-      daily.push({
-        date: dStr,
-        active: activeSet.size,
-        cumulativeTotal: cumulativeSet.size
-      });
-    }
-
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
     return res.status(200).json({
       totalUsers,
-      activeToday,
-      daily
+      activeToday
     });
   } catch (err) {
     console.error('[Activity stats error]', err);
     return res.status(500).json({ error: 'Internal server error processing activity stats' });
   }
 }
+
