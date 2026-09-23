@@ -1403,12 +1403,36 @@ async function runAIEvaluation(shoulderStability, headStability) {
     lastAIData = {
       metrics: {
         ...metrics,
+        shoulder_stability: parseFloat((shoulderStability / 100).toFixed(3)),
+        head_stability: parseFloat((headStability / 100).toFixed(3)),
         'Shoulder Stability': shoulderStability / 100,
         'Head Stability': headStability / 100
       },
       parsed,
       timestamp: new Date()
     };
+
+    // Auto-reveal popup score card upon completing evaluation
+    try {
+      const autoScore = computePostureScore(lastAIData.metrics);
+      openShareRevealModal({
+        id: generateShareId(),
+        score: autoScore,
+        severity: severityFor(autoScore),
+        variant: 'single',
+        metrics: {
+          neck_deviation: metrics.neckDeviationAngle != null ? parseFloat(metrics.neckDeviationAngle.toFixed(1)) : null,
+          shoulder_tilt: metrics.shoulderTilt != null ? parseFloat(metrics.shoulderTilt.toFixed(1)) : null,
+          head_tilt: metrics.headTilt != null ? parseFloat(metrics.headTilt.toFixed(1)) : null,
+          shoulder_stability: parseFloat((shoulderStability / 100).toFixed(2)),
+          head_stability: parseFloat((headStability / 100).toFixed(2))
+        },
+        summary: parsed?.summary || '',
+        timestamp: new Date().toISOString()
+      });
+    } catch (popupErr) {
+      console.warn('[Auto-reveal score card note]', popupErr);
+    }
 
     // Non-blocking save to Supabase scans table if signed in
     if (window.supabaseClient) {
@@ -1548,9 +1572,9 @@ function calculateStreak(scans) {
   let streak = 0;
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const yesterday = new Date(Date.now() - 86400000);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
   const yestStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
-
   let checkDate = dates.includes(todayStr) ? new Date(today) : (dates.includes(yestStr) ? new Date(yesterday) : null);
   if (!checkDate) return 0;
 
@@ -2354,10 +2378,19 @@ function openShareRevealModal(payload) {
 // Single Scan Share Button
 if (shareResultBtn) {
   shareResultBtn.addEventListener('click', () => {
-    if (!lastAIData) return;
-    const { metrics, parsed, timestamp } = lastAIData;
-    const score = computePostureScore(metrics);
+    const metricsSource = lastAIData?.metrics || latestMetrics;
+    if (!metricsSource) {
+      alert('Please start camera and record a posture scan first.');
+      return;
+    }
+    const score = computePostureScore(metricsSource);
     const id = generateShareId();
+
+    const neckVal = metricsSource.neckDeviationAngle ?? metricsSource.neck_deviation ?? metricsSource.neckDeviation;
+    const shoulderVal = metricsSource.shoulderTilt ?? metricsSource.shoulder_tilt;
+    const headVal = metricsSource.headTilt ?? metricsSource.head_tilt;
+    const sStabVal = metricsSource.shoulder_stability ?? metricsSource.shoulderStability ?? metricsSource['Shoulder Stability'] ?? 0.05;
+    const hStabVal = metricsSource.head_stability ?? metricsSource.headStability ?? metricsSource['Head Stability'] ?? 0.05;
 
     const payload = {
       id,
@@ -2365,13 +2398,14 @@ if (shareResultBtn) {
       severity: severityFor(score),
       variant: 'single',
       metrics: {
-        neck_deviation: metrics.neckDeviationAngle != null ? parseFloat(metrics.neckDeviationAngle.toFixed(1)) : null,
-        shoulder_tilt: metrics.shoulderTilt != null ? parseFloat(metrics.shoulderTilt.toFixed(1)) : null,
-        head_tilt: metrics.headTilt != null ? parseFloat(metrics.headTilt.toFixed(1)) : null,
-        head_stability: metrics['Head Stability'] != null ? parseFloat(metrics['Head Stability'].toFixed(2)) : null
+        neck_deviation: neckVal != null ? parseFloat(Number(neckVal).toFixed(1)) : null,
+        shoulder_tilt: shoulderVal != null ? parseFloat(Number(shoulderVal).toFixed(1)) : null,
+        head_tilt: headVal != null ? parseFloat(Number(headVal).toFixed(1)) : null,
+        shoulder_stability: parseFloat(Number(sStabVal).toFixed(2)),
+        head_stability: parseFloat(Number(hStabVal).toFixed(2))
       },
-      summary: parsed?.summary || '',
-      timestamp: timestamp ? timestamp.toISOString() : new Date().toISOString()
+      summary: lastAIData?.parsed?.summary || 'Verified on-device biomechanical screening.',
+      timestamp: lastAIData?.timestamp ? lastAIData.timestamp.toISOString() : new Date().toISOString()
     };
 
     openShareRevealModal(payload);
