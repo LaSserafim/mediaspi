@@ -318,25 +318,23 @@
   .history-severity.good{background:rgba(74,107,90,.2); color:var(--sage);}
   .history-severity.caution{background:rgba(184,147,95,.22); color:var(--amber);}
   /* ---------- REVEAL SHARE CARD MODAL ---------- */
-  .share-card-overlay { position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; }
+  .share-card-overlay { position: fixed; inset: 0; z-index: 999; display: flex; align-items: flex-start; justify-content: center; padding: 36px 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .share-card-overlay.hidden { display: none; }
-  .share-card-backdrop { position: absolute; inset: 0; background: rgba(20,20,15,0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-  .share-card-modal { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; transform: scale(0.94); opacity: 0; transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1), opacity 250ms ease-out; max-width: 95vw; max-height: 94vh; }
+  .share-card-backdrop { position: fixed; inset: 0; background: rgba(20,20,15,0.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .share-card-modal { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; transform: scale(0.94); opacity: 0; transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1), opacity 250ms ease-out; max-width: 96vw; margin: auto 0; }
   .share-card-overlay.open .share-card-modal { transform: scale(1); opacity: 1; }
   .share-card-canvas-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
   #shareCardCanvas {
-    width: var(--share-card-w, min(500px, 88vw, calc((82vh - 120px) * 0.8)));
-    max-height: calc(84vh - 120px);
+    width: var(--share-card-w, min(480px, 92vw));
     max-width: 92vw;
     height: auto;
     aspect-ratio: 4 / 5;
-    object-fit: contain;
     border-radius: 12px;
     box-shadow: 0 24px 70px rgba(0,0,0,0.38);
     background: var(--cream, #F6F4EE);
     display: block;
     cursor: zoom-in;
-    transition: width 220ms cubic-bezier(0.16, 1, 0.3, 1), max-width 220ms ease;
+    transition: width 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms ease;
   }
   #shareCardCanvas.is-zoomed { cursor: zoom-out; }
   .share-card-controls {
@@ -2660,16 +2658,17 @@ if (typeof window !== 'undefined') {
 // ── Card Size Adjuster Logic ──────────────────────────────────────────
 const CARD_SIZES = {
   compact: 360,
-  regular: 500,
-  large: 600,
-  max: 700
+  regular: 480,
+  large: 640,
+  max: 800
 };
 
 function applyCardSize(targetPx, presetName) {
   if (!shareCardCanvas) return;
-  const maxAllowed = Math.floor(Math.min((window.innerWidth || 1200) * 0.92, ((window.innerHeight || 800) * 0.84 - 120) * 0.8));
-  const minAllowed = 280;
-  const clampedWidth = Math.max(minAllowed, Math.min(targetPx, Math.max(minAllowed, maxAllowed)));
+  // Allow L (640px) and XL (800px) to expand freely, constrained only by screen width
+  const maxAllowed = Math.floor((window.innerWidth || 1200) * 0.94);
+  const minAllowed = 260;
+  const clampedWidth = Math.max(minAllowed, Math.min(targetPx, maxAllowed));
   
   if (shareCardCanvas.style && shareCardCanvas.style.setProperty) {
     shareCardCanvas.style.setProperty('--share-card-w', `${clampedWidth}px`);
@@ -2678,7 +2677,7 @@ function applyCardSize(targetPx, presetName) {
     shareCardCanvas.style.width = `${clampedWidth}px`;
   }
   
-  const pct = Math.round((clampedWidth / 500) * 100);
+  const pct = Math.round((clampedWidth / 480) * 100);
   const zoomVal = document.getElementById('cardZoomVal');
   if (zoomVal) zoomVal.textContent = `${pct}%`;
   
@@ -2697,10 +2696,10 @@ try {
     applyCardSize(saved.width, saved.preset || 'regular');
   } else {
     const isDesktop = typeof window !== 'undefined' && (window.innerWidth || 1200) > 900;
-    applyCardSize(isDesktop ? 500 : Math.min(420, (window.innerWidth || 500) * 0.88), 'regular');
+    applyCardSize(isDesktop ? 480 : Math.min(380, (window.innerWidth || 500) * 0.9), 'regular');
   }
 } catch (e) {
-  applyCardSize(500, 'regular');
+  applyCardSize(480, 'regular');
 }
 
 document.querySelectorAll('.size-btn').forEach(btn => {
@@ -2719,23 +2718,23 @@ const cardZoomOut = document.getElementById('cardZoomOut');
 if (cardZoomIn) {
   cardZoomIn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const currentW = parseFloat(shareCardCanvas.style.width) || 500;
-    applyCardSize(currentW + 50, 'custom');
+    const currentW = parseFloat(shareCardCanvas.style.width) || 480;
+    applyCardSize(currentW + 60, 'custom');
   });
 }
 
 if (cardZoomOut) {
   cardZoomOut.addEventListener('click', (e) => {
     e.stopPropagation();
-    const currentW = parseFloat(shareCardCanvas.style.width) || 500;
-    applyCardSize(currentW - 50, 'custom');
+    const currentW = parseFloat(shareCardCanvas.style.width) || 480;
+    applyCardSize(currentW - 60, 'custom');
   });
 }
 
 if (shareCardCanvas) {
   shareCardCanvas.addEventListener('click', () => {
-    const currentW = parseFloat(shareCardCanvas.style.width) || 500;
-    if (currentW >= 560) {
+    const currentW = parseFloat(shareCardCanvas.style.width) || 480;
+    if (currentW >= 600) {
       applyCardSize(CARD_SIZES.regular, 'regular');
       shareCardCanvas.classList.remove('is-zoomed');
     } else {
@@ -2744,7 +2743,6 @@ if (shareCardCanvas) {
     }
   });
 }
-
 /* ═══════════════════════════════════════════════════════════════════
    PUBLIC COMMUNITY & ACTIVITY STATS
 ═══════════════════════════════════════════════════════════════════ */
