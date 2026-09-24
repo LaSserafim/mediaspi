@@ -521,6 +521,8 @@
     const authBtn = document.getElementById('authBtn');
     const userMenu = document.getElementById('userMenu');
     const userEmail = document.getElementById('userEmail');
+    const userAvatar = document.getElementById('userAvatar');
+    const userActiveBadge = document.getElementById('userActiveBadge');
     const progressNav = document.getElementById('progressNav');
     const progressSection = document.getElementById('progress');
 
@@ -529,6 +531,10 @@
       if (userMenu) userMenu.style.display = 'inline-flex';
       const displayName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'My Account';
       if (userEmail) userEmail.textContent = displayName;
+      if (userAvatar && user.user_metadata?.avatar_url) {
+        userAvatar.src = user.user_metadata.avatar_url;
+        userAvatar.style.display = 'inline-block';
+      }
       if (progressNav) progressNav.style.display = 'inline-block';
       if (progressSection) progressSection.style.display = 'block';
       cleanUrlHash();
@@ -541,11 +547,12 @@
         authBtn.disabled = false;
       }
       if (userMenu) userMenu.style.display = 'none';
+      if (userAvatar) userAvatar.style.display = 'none';
+      if (userActiveBadge) userActiveBadge.style.display = 'none';
       if (progressNav) progressNav.style.display = 'none';
       if (progressSection) progressSection.style.display = 'none';
     }
   }
-
   window.signInWithGoogle = async function() {
     const authBtn = document.getElementById('authBtn');
     if (authBtn) authBtn.disabled = true;
@@ -581,13 +588,50 @@
   async function pingActivity(session) {
     if (!session || !session.user) return;
     const today = new Date().toISOString().slice(0, 10);
+    const user = session.user;
     const client = window.supabaseClient || supabase;
-    if (!client) return;
-    const { error } = await client
-      .from('user_activity')
-      .upsert({ user_id: session.user.id, activity_date: today }, { onConflict: 'user_id,activity_date' });
-    if (error) {
-      console.error('[pingActivity failed]', error.message, error.details || '', error.hint || '', error.code || '');
+
+    // 1. Direct Supabase ping if client available
+    if (client) {
+      try {
+        await client
+          .from('user_activity')
+          .upsert({ user_id: user.id, activity_date: today }, { onConflict: 'user_id,activity_date' });
+      } catch (e) {}
+    }
+
+    // 2. Server-side API ping (records activity + synchronizes profile + verifies weekly status)
+    try {
+      const res = await fetch('/api/activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          email: user.email || '',
+          full_name: user.user_metadata?.full_name || '',
+          avatar_url: user.user_metadata?.avatar_url || ''
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const activeBadge = document.getElementById('userActiveBadge');
+        if (activeBadge) {
+          activeBadge.style.display = 'inline-flex';
+          if (data.weeklyActive) {
+            activeBadge.textContent = '● Active (1x/wk)';
+            activeBadge.style.color = 'var(--sage, #4A6B5A)';
+            activeBadge.style.background = 'rgba(74,107,90,.16)';
+            activeBadge.title = `Active user verified: ${data.daysActiveLast7Days || 1} session(s) in past 7 days.`;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Activity sync note]', err);
+    }
+
+    // 3. Refresh live platform stats with user context
+    if (typeof window.fetchPlatformStats === 'function') {
+      window.fetchPlatformStats(user.id);
     }
   }
 
@@ -620,8 +664,10 @@
         <svg width="14" height="14" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
         Sign in with Google
       </button>
-      <div id="userMenu" style="display:none; align-items:center; gap:10px;">
+      <div id="userMenu" style="display:none; align-items:center; gap:8px;">
+        <img id="userAvatar" src="" alt="Avatar" style="display:none; width:22px; height:22px; border-radius:50%; border:1px solid var(--line); object-fit:cover;">
         <span id="userEmail" style="font-family:var(--mono); font-size:12px; color:var(--sage); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+        <span id="userActiveBadge" style="display:none; font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:3px; background:rgba(74,107,90,.16); color:var(--sage); font-weight:500;" title="Active User: at least 1 session in past 7 days">● Active (1x/wk)</span>
         <button class="btn btn-ghost" onclick="window.signOutUser()" style="padding:6px 12px; font-size:11.5px;">Sign out</button>
       </div>
     </div>
@@ -658,14 +704,21 @@
 <!-- Community & Activity Live Metrics (Visible to all visitors) -->
 <section style="padding: 24px 0 0; background: var(--bg);">
   <div class="wrap">
-    <div class="progress-stats" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 0;">
+    <div class="progress-stats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 0;">
       <div class="progress-stat-item">
-        <span class="label">Total Users</span>
+        <span class="label">Total Signed-In Users</span>
         <div class="val" id="platformTotalUsers">—</div>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--ink-soft); margin-top:4px;">Google Accounts Recorded</div>
+      </div>
+      <div class="progress-stat-item">
+        <span class="label">Weekly Active Users</span>
+        <div class="val" id="platformActiveWeekly" style="color:var(--sage);">—</div>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--ink-soft); margin-top:4px;">Used min. 1x in last 7 days</div>
       </div>
       <div class="progress-stat-item">
         <span class="label">Active Today</span>
         <div class="val" id="platformActiveToday">—</div>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--ink-soft); margin-top:4px;">Online in last 24h</div>
       </div>
     </div>
   </div>
@@ -2796,20 +2849,41 @@ if (shareCardCanvas) {
 /* ═══════════════════════════════════════════════════════════════════
    PUBLIC COMMUNITY & ACTIVITY STATS
 ═══════════════════════════════════════════════════════════════════ */
-async function fetchPlatformStats() {
+async function fetchPlatformStats(userId = null) {
   const totalUsersEl = document.getElementById('platformTotalUsers');
+  const activeWeeklyEl = document.getElementById('platformActiveWeekly');
   const activeTodayEl = document.getElementById('platformActiveToday');
+  const activeBadge = document.getElementById('userActiveBadge');
   try {
-    const res = await fetch('/api/stats');
+    const targetId = userId || (window.currentUser ? window.currentUser.id : '');
+    const url = targetId ? `/api/stats?user_id=${encodeURIComponent(targetId)}` : '/api/stats';
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (totalUsersEl) totalUsersEl.textContent = data.totalUsers != null ? data.totalUsers : '—';
+    if (activeWeeklyEl) activeWeeklyEl.textContent = data.activeWeekly != null ? data.activeWeekly : '—';
     if (activeTodayEl) activeTodayEl.textContent = data.activeToday != null ? data.activeToday : '—';
+
+    if (activeBadge && data.specificUser) {
+      activeBadge.style.display = 'inline-flex';
+      if (data.specificUser.activeWeekly) {
+        activeBadge.textContent = '● Active (1x/wk)';
+        activeBadge.style.color = 'var(--sage, #4A6B5A)';
+        activeBadge.style.background = 'rgba(74,107,90,.16)';
+        activeBadge.title = `Active user verified: ${data.specificUser.activeDaysLast7Days || 1} session(s) in past 7 days.`;
+      } else {
+        activeBadge.textContent = '○ Inactive (no sessions in 7d)';
+        activeBadge.style.color = 'var(--amber, #B8935F)';
+        activeBadge.style.background = 'rgba(184,147,95,.16)';
+      }
+    }
   } catch (err) {
     if (totalUsersEl) totalUsersEl.textContent = '—';
+    if (activeWeeklyEl) activeWeeklyEl.textContent = '—';
     if (activeTodayEl) activeTodayEl.textContent = '—';
   }
 }
+window.fetchPlatformStats = fetchPlatformStats;
 
 // Fetch platform stats on load for every visitor
 fetchPlatformStats();
